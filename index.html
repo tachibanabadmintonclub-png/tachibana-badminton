@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BadmintonDraw">
 <meta name="theme-color" content="#070c18">
@@ -877,15 +878,32 @@ function fbInit(){
   try{
     if(typeof firebase==='undefined'){ fbSetStatus('offline','SDKなし'); return; }
     if(!fbApp){
-      fbApp=firebase.initializeApp({databaseURL:FB_URL},'tbadminton');
+      // Check if already initialized (hot-reload guard)
+      try{
+        fbApp=firebase.app('tbadminton');
+      }catch(e){
+        fbApp=firebase.initializeApp({databaseURL:FB_URL},'tbadminton');
+      }
       fbDb=firebase.database(fbApp);
     }
     fbSetStatus('syncing','接続中...');
+    // .info/connected monitors real-time connection state
     firebase.database(fbApp).ref('.info/connected').on('value',function(snap){
+      var wasConnected=fbConnected;
       fbConnected=snap.val()===true;
-      if(fbConnected){ fbSetStatus('online','接続済'); fbSubscribe(); }
-      else{ fbSetStatus('offline','切断'); }
+      if(fbConnected){
+        fbSetStatus('online','接続済');
+        if(!wasConnected) fbSubscribe(); // only subscribe on new connection
+      } else{
+        fbSetStatus('offline','オフライン');
+      }
     });
+    // Also try a direct read to detect connection faster
+    setTimeout(function(){
+      firebase.database(fbApp).ref('.info/serverTimeOffset').once('value')
+        .then(function(){ if(!fbConnected){ fbConnected=true; fbSetStatus('online','接続済'); fbSubscribe(); } })
+        .catch(function(e){ console.warn('FB connectivity test:',e); });
+    },2000);
   }catch(e){ console.warn('Firebase init:',e); fbSetStatus('offline','初期化エラー'); }
 }
 function fbSetStatus(state,text){
@@ -1180,6 +1198,8 @@ function init(){
   renderAll();
   applyAdminUI();
   updateHeaderProjectNav();
+  checkFirstTimeIdentity();
+  fbInit();
 }
 function checkDateChange(){
   var today=todayStr();
