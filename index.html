@@ -333,6 +333,12 @@ textarea.field{resize:vertical;min-height:60px}
 .session-detail-view.open{display:block}
 .session-detail-back{display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:10px;cursor:pointer;color:var(--text2);font-size:13px}
 .session-detail-back:active{color:var(--accent)}
+/* Firebase status */
+.fb-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;flex-shrink:0}
+.fb-dot.online{background:var(--green);box-shadow:0 0 5px var(--green)}
+.fb-dot.offline{background:var(--text3)}
+.fb-dot.syncing{background:var(--yellow);animation:blink 1s infinite}
+.fb-status{display:flex;align-items:center;font-size:9px;color:var(--text3);padding:2px 6px;border-radius:100px;background:var(--bg3);border:1px solid var(--border);cursor:default}
 .id-pill-wrap{cursor:pointer;transition:all .18s}
 .id-pill-wrap:active{transform:scale(.93)}
 .pin-dots{display:flex;gap:10px;justify-content:center;margin:14px 0}
@@ -344,6 +350,10 @@ textarea.field{resize:vertical;min-height:60px}
 .pin-key.del{color:var(--orange);font-size:15px}
 .pin-key.cancel{color:var(--red);font-size:15px}
 </style>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -352,6 +362,7 @@ textarea.field{resize:vertical;min-height:60px}
   <div style="flex:1;min-width:0">
     <div class="hdr-logo">Tachibana <span style="color:var(--text2);font-size:14px;font-weight:500">BADMINTON</span><span style="color:var(--text3);font-size:11px;font-weight:400;margin-left:4px">v2</span></div>
     <div class="hdr-date" id="hdr-date"></div>
+    <div class="fb-status" id="fb-status" title="Firebase接続状態"><span class="fb-dot offline" id="fb-dot"></span><span id="fb-status-text">オフライン</span></div>
   </div>
   <!-- 年度切替 -->
   <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
@@ -856,6 +867,81 @@ let S = {
 const STORAGE_KEY = 'bm_v2_state';
 const GLOBAL_KEY = 'bm_v2_global';
 
+const FB_URL = 'https://tachibana-badminton-default-rtdb.asia-southeast1.firebasedatabase.app';
+const FB_PATH = 'projects/';
+
+var fbApp=null, fbDb=null, fbRef=null, fbConnected=false;
+var fbSyncTimer=null, fbLastPush=0;
+
+function fbInit(){
+  try{
+    if(typeof firebase==='undefined'){ fbSetStatus('offline','SDKなし'); return; }
+    if(!fbApp){
+      fbApp=firebase.initializeApp({databaseURL:FB_URL},'tbadminton');
+      fbDb=firebase.database(fbApp);
+    }
+    fbSetStatus('syncing','接続中...');
+    firebase.database(fbApp).ref('.info/connected').on('value',function(snap){
+      fbConnected=snap.val()===true;
+      if(fbConnected){ fbSetStatus('online','接続済'); fbSubscribe(); }
+      else{ fbSetStatus('offline','切断'); }
+    });
+  }catch(e){ console.warn('Firebase init:',e); fbSetStatus('offline','初期化エラー'); }
+}
+function fbSetStatus(state,text){
+  var dot=document.getElementById('fb-dot');
+  var txt=document.getElementById('fb-status-text');
+  if(dot) dot.className='fb-dot '+state;
+  if(txt) txt.textContent=text;
+}
+function fbGetPath(){
+  var g=loadGlobal();
+  var pid=g?g.currentId:'default';
+  return FB_PATH+pid.replace(/[.$#\[\]]/g,'_');
+}
+function fbSubscribe(){
+  if(fbRef){ try{fbRef.off();}catch(e){} }
+  fbRef=firebase.database(fbApp).ref(fbGetPath());
+  fbRef.on('value',function(snap){
+    var d=snap.val(); if(!d) return;
+    if(d._ts && d._ts<=(S._ts||0)) return;
+    if(d._ts && d._ts===fbLastPush) return;
+    var syncFields=['courts','members','sessions','todayParticipants','todayDate','adminIds'];
+    syncFields.forEach(function(k){ if(d[k]!==undefined) S[k]=d[k]; });
+    S._ts=d._ts||Date.now();
+    save();
+    renderCourts(); renderWaiting();
+    if(currentTab==='history') renderHistory();
+    if(currentTab==='today'){ renderToday(); renderTodayRanking(); }
+    fbSetStatus('online','同期: '+fbAgo(d._ts));
+  },function(e){ console.warn('FB listen:',e); fbSetStatus('offline','読取エラー'); });
+}
+function fbPush(){
+  if(!fbConnected||!fbDb) return;
+  clearTimeout(fbSyncTimer);
+  fbSyncTimer=setTimeout(function(){
+    try{
+      var ts=Date.now(); fbLastPush=ts;
+      var payload={
+        courts:S.courts, members:S.members, sessions:S.sessions,
+        todayParticipants:S.todayParticipants, todayDate:S.todayDate,
+        adminIds:S.adminIds, _ts:ts
+      };
+      firebase.database(fbApp).ref(fbGetPath()).set(payload)
+        .then(function(){ fbSetStatus('online','同期: '+fbAgo(ts)); })
+        .catch(function(e){ console.warn('FB push:',e); fbSetStatus('offline','書込エラー'); });
+    }catch(e){ console.warn('fbPush:',e); }
+  },1500);
+}
+function fbAgo(ts){
+  if(!ts) return '';
+  var s=Math.floor((Date.now()-ts)/1000);
+  if(s<5) return 'たった今';
+  if(s<60) return s+'秒前';
+  return Math.floor(s/60)+'分前';
+}
+function fbResubscribe(){ if(fbConnected) fbSubscribe(); }
+
 function loadGlobal(){
   try{
     var r=localStorage.getItem(GLOBAL_KEY);
@@ -923,6 +1009,7 @@ function switchProject(id){
   var p=getCurrentProject();
   toast('プロジェクトを切り替えました: '+(p?p.name:''));
   setTimeout(checkFirstTimeIdentity,400);
+  fbResubscribe(); // Firebaseリスナーを切替
 }
 function updateCurrentProjectBadge(){
   var p=getCurrentProject();
@@ -1019,12 +1106,12 @@ function save(){
   try{
     var data=JSON.stringify(S);
     localStorage.setItem(STORAGE_KEY,data);
-    // Save to project key without history (reduce size, history is temp undo data)
     var g=loadGlobal(); if(g&&g.currentId){
       var slim=Object.assign({},S,{history:[]});
       localStorage.setItem(getProjectKey(g.currentId),JSON.stringify(slim));
     }
   }catch(e){ toast('保存エラー: '+e.message); }
+  if(typeof isAdmin==='function'&&isAdmin()) fbPush();
 }
 function load(){
   const raw = localStorage.getItem(STORAGE_KEY);
