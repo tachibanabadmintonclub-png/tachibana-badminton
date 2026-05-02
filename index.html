@@ -917,32 +917,58 @@ function fbGetPath(){
   var pid=g?g.currentId:'default';
   return FB_PATH+pid.replace(/[.$#\[\]]/g,'_');
 }
+function fbApplyProjectData(d){
+  if(!d) return;
+  var inTs=d._ts||0;
+  if(inTs>0 && inTs===fbLastPush) return; // our own echo
+  if(inTs>0 && inTs<((S._ts||0)-500)) return; // genuinely older
+  var syncFields=['members','courts','sessions','todayParticipants','todayDate',
+                  'adminIds','levels','groups','settings','nextId'];
+  syncFields.forEach(function(k){ if(d[k]!==undefined) S[k]=d[k]; });
+  S._ts=inTs||Date.now();
+  try{
+    var slim=JSON.stringify(S);
+    localStorage.setItem(STORAGE_KEY,slim);
+    var gg=loadGlobal(); if(gg&&gg.currentId) localStorage.setItem(getProjectKey(gg.currentId),slim);
+  }catch(ex){}
+  if(document.getElementById('courts-container')) renderCourts();
+  renderWaiting();
+  if(currentTab==='history') renderHistory();
+  if(currentTab==='today'){ renderToday(); renderTodayRanking(); }
+  if(currentTab==='member') renderMembers();
+  updateCurrentProjectBadge();
+  fbSetStatus('online','同期: '+fbAgo(inTs));
+  console.log('[FB] project synced ts='+inTs);
+}
+function fbApplyGlobal(d){
+  if(!d) return;
+  var inTs=d._ts||0;
+  if(inTs>0 && inTs===fbLastPush) return;
+  // Update global project list
+  if(d.projects&&Array.isArray(d.projects)){
+    var g=loadGlobal()||{projects:[],currentId:null};
+    // Merge: keep local currentId, update project list
+    var localCurrent=g.currentId;
+    g.projects=d.projects;
+    if(!g.projects.find(function(p){return p.id===localCurrent;})){
+      g.currentId=d.currentId||g.projects[0]?.id;
+    }
+    saveGlobal(g);
+    updateCurrentProjectBadge();
+    if(currentTab==='member') renderMembers();
+    console.log('[FB] global synced, projects='+d.projects.length);
+  }
+}
 function fbSubscribe(){
   if(fbRef){ try{fbRef.off();}catch(e){} }
-  fbRef=firebase.database(fbApp).ref(fbGetPath());
-  fbRef.on('value',function(snap){
-    var d=snap.val(); if(!d) return;
-    var inTs=d._ts||0;
-    if(inTs>0 && inTs===fbLastPush) return; // our own echo
-    if(inTs>0 && inTs<((S._ts||0)-500)) return; // genuinely older data
-    var syncFields=['courts','members','sessions','todayParticipants','todayDate','adminIds'];
-    syncFields.forEach(function(k){ if(d[k]!==undefined) S[k]=d[k]; });
-    S._ts=inTs||Date.now();
-    // Save locally without triggering another fbPush
-    try{
-      var slim=JSON.stringify(S);
-      localStorage.setItem(STORAGE_KEY,slim);
-      var gg=loadGlobal(); if(gg&&gg.currentId) localStorage.setItem(getProjectKey(gg.currentId),slim);
-    }catch(ex){}
-    // Re-render affected views
-    if(document.getElementById('courts-container')) renderCourts();
-    renderWaiting();
-    if(currentTab==='history') renderHistory();
-    if(currentTab==='today'){ renderToday(); renderTodayRanking(); }
-    if(currentTab==='member') renderMembers();
-    fbSetStatus('online','同期: '+fbAgo(inTs));
-    console.log('[FB] synced ts='+inTs);
-  },function(e){ console.warn('FB listen:',e); fbSetStatus('offline','読取エラー'); });
+  var db=firebase.database(fbApp);
+  // Listen to current project data
+  fbRef=db.ref(fbGetPath());
+  fbRef.on('value',function(snap){ fbApplyProjectData(snap.val()); },
+    function(e){ console.warn('FB project listen:',e); fbSetStatus('offline','読取エラー'); });
+  // Listen to global project list
+  db.ref('global').on('value',function(snap){ fbApplyGlobal(snap.val()); },
+    function(e){ console.warn('FB global listen:',e); });
 }
 function fbPush(){
   if(!fbConnected||!fbDb) return;
@@ -950,16 +976,24 @@ function fbPush(){
   fbSyncTimer=setTimeout(function(){
     try{
       var ts=Date.now(); fbLastPush=ts;
-      var payload={
-        courts:S.courts, members:S.members, sessions:S.sessions,
+      var db=firebase.database(fbApp);
+      var updates={};
+      // 1. Push current project's full data
+      var path=fbGetPath();
+      updates[path]={
+        members:S.members, courts:S.courts, sessions:S.sessions,
         todayParticipants:S.todayParticipants, todayDate:S.todayDate,
-        adminIds:S.adminIds, _ts:ts
+        adminIds:S.adminIds, levels:S.levels, groups:S.groups,
+        settings:S.settings, nextId:S.nextId, _ts:ts
       };
-      firebase.database(fbApp).ref(fbGetPath()).set(payload)
+      // 2. Push global project list
+      var g=loadGlobal();
+      if(g) updates['global']={projects:g.projects, currentId:g.currentId, _ts:ts};
+      db.ref('/').update(updates)
         .then(function(){ fbSetStatus('online','同期: '+fbAgo(ts)); })
         .catch(function(e){ console.warn('FB push:',e); fbSetStatus('offline','書込エラー'); });
     }catch(e){ console.warn('fbPush:',e); }
-  },1500);
+  },800);
 }
 function fbAgo(ts){
   if(!ts) return '';
@@ -980,7 +1014,11 @@ function loadGlobal(){
     return g;
   }catch(e){ return null; }
 }
-function saveGlobal(g){ try{ localStorage.setItem(GLOBAL_KEY,JSON.stringify(g)); }catch(e){} }
+function saveGlobal(g){
+  try{ localStorage.setItem(GLOBAL_KEY,JSON.stringify(g)); }catch(e){}
+  // Sync global to Firebase (debounced via fbPush which also pushes global)
+  // fbPush will be called by save() after project operations
+}
 function getProjectKey(id){ return 'bm_proj_'+String(id); }
 function getCurrentProject(){
   var g=loadGlobal(); if(!g) return null;
@@ -1038,6 +1076,8 @@ function switchProject(id){
   toast('プロジェクトを切り替えました: '+(p?p.name:''));
   setTimeout(checkFirstTimeIdentity,400);
   fbResubscribe(); // Firebaseリスナーを切替
+  // Push the new global state immediately
+  setTimeout(fbPush,500);
 }
 function updateCurrentProjectBadge(){
   var p=getCurrentProject();
