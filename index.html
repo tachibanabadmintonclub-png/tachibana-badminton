@@ -922,16 +922,26 @@ function fbSubscribe(){
   fbRef=firebase.database(fbApp).ref(fbGetPath());
   fbRef.on('value',function(snap){
     var d=snap.val(); if(!d) return;
-    if(d._ts && d._ts<=(S._ts||0)) return;
-    if(d._ts && d._ts===fbLastPush) return;
+    var inTs=d._ts||0;
+    if(inTs>0 && inTs===fbLastPush) return; // our own echo
+    if(inTs>0 && inTs<((S._ts||0)-500)) return; // genuinely older data
     var syncFields=['courts','members','sessions','todayParticipants','todayDate','adminIds'];
     syncFields.forEach(function(k){ if(d[k]!==undefined) S[k]=d[k]; });
-    S._ts=d._ts||Date.now();
-    save();
-    renderCourts(); renderWaiting();
+    S._ts=inTs||Date.now();
+    // Save locally without triggering another fbPush
+    try{
+      var slim=JSON.stringify(S);
+      localStorage.setItem(STORAGE_KEY,slim);
+      var gg=loadGlobal(); if(gg&&gg.currentId) localStorage.setItem(getProjectKey(gg.currentId),slim);
+    }catch(ex){}
+    // Re-render affected views
+    if(document.getElementById('courts-container')) renderCourts();
+    renderWaiting();
     if(currentTab==='history') renderHistory();
     if(currentTab==='today'){ renderToday(); renderTodayRanking(); }
-    fbSetStatus('online','同期: '+fbAgo(d._ts));
+    if(currentTab==='member') renderMembers();
+    fbSetStatus('online','同期: '+fbAgo(inTs));
+    console.log('[FB] synced ts='+inTs);
   },function(e){ console.warn('FB listen:',e); fbSetStatus('offline','読取エラー'); });
 }
 function fbPush(){
@@ -1129,7 +1139,7 @@ function save(){
       localStorage.setItem(getProjectKey(g.currentId),JSON.stringify(slim));
     }
   }catch(e){ toast('保存エラー: '+e.message); }
-  if(typeof isAdmin==='function'&&isAdmin()) fbPush();
+  fbPush();
 }
 function load(){
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -1267,7 +1277,14 @@ function switchTab(tab){
    LEVELS
 ============================================================ */
 function getLevelById(id){ return S.levels.find(l=>l.id===id)||S.levels[0]||{id:0,name:'?',color:'#888',order:99}; }
-function sortedLevels(){ return [...S.levels].sort((a,b)=>a.order-b.order); }
+function sortedLevels(){
+  if(!S.levels||!S.levels.length) return [];
+  return [...S.levels].sort(function(a,b){
+    var ao=(a&&a.order!=null)?a.order:99;
+    var bo=(b&&b.order!=null)?b.order:99;
+    return ao-bo;
+  });
+}
 
 function addLevel(){
   const name = document.getElementById('new-level-name').value.trim();
@@ -2550,7 +2567,7 @@ function openSettingsModal(){
   renderCourtLevelRows();
   renderLevelConsecRows();
   renderFaceSettings();
-  openModal('modal-settings');
+  // Opens via openModal which calls this as setup
 }
 function renderLevelConsecRows(){
   var lvls=sortedLevels();
