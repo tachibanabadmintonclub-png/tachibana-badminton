@@ -575,6 +575,17 @@ textarea.field{resize:vertical;min-height:60px}
   <div id="face-settings-rows"></div>
 
   <div class="div"></div>
+  <div class="modal-sub-title">🔐 入室コード</div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:8px;line-height:1.6">設定するとURLを知っていてもコードなしで入室できなくなります。メンバーにLINEで共有してください。管理者のみ変更可能。</div>
+  <div class="set-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+    <div><div class="set-row-lbl">現在のコード</div><div id="club-code-disp" style="font-size:12px;color:var(--orange);margin-top:2px">未設定</div></div>
+    <div style="display:flex;gap:7px;width:100%">
+      <input class="field sm" id="new-club-code" placeholder="例: tachi2026" maxlength="20" style="flex:1">
+      <button class="btn primary sm" onclick="setClubCode()">設定</button>
+      <button class="btn danger sm" onclick="clearClubCode()">解除</button>
+    </div>
+  </div>
+  <div class="div"></div>
   <button class="btn ghost full" onclick="closeModal('modal-settings')">閉じる</button>
 </div>
 </div>
@@ -917,8 +928,16 @@ function fbGetPath(){
   var pid=g?g.currentId:'default';
   return FB_PATH+pid.replace(/[.$#\[\]]/g,'_');
 }
+function fbNormalizeData(d){
+  if(!d)return d;
+  function toArr(v,n){if(!v)return v;if(Array.isArray(v))return v;var a=new Array(n||4).fill(null);Object.keys(v).forEach(function(k){a[parseInt(k)]=v[k];});return a;}
+  if(d.courts&&Array.isArray(d.courts))d.courts.forEach(function(c){if(c&&c.players!=null)c.players=toArr(c.players,4);});
+  ['members','sessions','levels','groups','adminIds','todayParticipants'].forEach(function(k){if(d[k]&&!Array.isArray(d[k]))d[k]=Object.values(d[k])||[];});
+  return d;
+}
 function fbApplyProjectData(d){
-  if(!d) return;
+  if(!d)return;
+  d=fbNormalizeData(d);
   var inTs=d._ts||0;
   if(inTs>0 && inTs===fbLastPush) return; // our own echo
   if(inTs>0 && inTs<((S._ts||0)-500)) return; // genuinely older
@@ -1231,25 +1250,29 @@ function defaultFaces(){
 /* ============================================================
    INIT
 ============================================================ */
-function init(){
+function doInit(){
   load();
-  if(!S.levels||!S.levels.length) S.levels = defaultLevels();
-  if(!S.groups||!S.groups.length) S.groups = defaultGroups();
-  if(!S.settings.faceThresholds||!S.settings.faceThresholds.length) S.settings.faceThresholds = defaultFaces();
-  if(!S.settings.levelConsec) S.settings.levelConsec={};
-  syncCourts();
-  checkDateChange(); // 日付変わっていたら自動リセット
-  updateHeaderDate();
-  setInterval(updateHeaderDate, 60000);
-  setInterval(checkDateChange, 60000); // 1分ごとに日付チェック
+  if(!S.levels||!S.levels.length)S.levels=defaultLevels();
+  if(!S.groups||!S.groups.length)S.groups=defaultGroups();
+  if(!S.settings.faceThresholds||!S.settings.faceThresholds.length)S.settings.faceThresholds=defaultFaces();
+  if(!S.settings.levelConsec)S.settings.levelConsec={};
+  syncCourts();checkDateChange();updateHeaderDate();
+  setInterval(updateHeaderDate,60000);setInterval(checkDateChange,60000);
   ['rest-section-hd','rest-note','tired-section-hd','tired-note'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.style.display='none';
+    var el=document.getElementById(id);if(el)el.style.display='none';
   });
-  renderAll();
-  applyAdminUI();
-  updateHeaderProjectNav();
-  checkFirstTimeIdentity();
-  fbInit();
+  renderAll();applyAdminUI();updateHeaderProjectNav();
+  checkFirstTimeIdentity();fbInit();
+  setTimeout(fbSyncClubCode,3000);
+}
+function init(){
+  initProjects();
+  var code=getClubCode();
+  if(code&&!hasValidCode()){
+    showCodeEntry(function(ok){if(ok)doInit();});
+  }else{
+    doInit();
+  }
 }
 function checkDateChange(){
   var today=todayStr();
@@ -1827,7 +1850,7 @@ function isConsecBlocked(m){
 }
 function getAvailableForCourt(courtId){
   const playing=new Set();
-  S.courts.forEach(c=>{ if(c.players&&c.id!==courtId) c.players.forEach(p=>playing.add(p)); });
+  S.courts.forEach(c=>{ if(c.players&&Array.isArray(c.players)&&c.id!==courtId) c.players.forEach(function(p){if(p!=null)playing.add(p);}); });
   // セッション開始前は抽選対象なし
   var sessionActive=(S.todayParticipants.length>0 || S.todayDate!=null);
   var sourceIds=sessionActive
@@ -2089,12 +2112,14 @@ function renderCourts(){
   const sw=S.swapMode;
   let out='';
   S.courts.forEach(function(c){
+    if(c.players!=null&&!Array.isArray(c.players)){var pa=[null,null,null,null];Object.keys(c.players).forEach(function(k){pa[parseInt(k)]=c.players[k];});c.players=pa;}
+    if(!S.settings||!S.settings.courtLevels){if(!S.settings)S.settings={};S.settings.courtLevels={};}
     const clv=S.settings.courtLevels[c.id]||'any';
     const dot=c.confirmed?'dot-done':c.players?'dot-active':'dot-idle';
     const cardCls=c.confirmed?'confirmed':c.players?'active':'';
     let body='';
-    if(c.players&&c.players.length===4){
-      const ps=c.players.map(function(id){return S.members.find(function(m){return m.id===id;});});
+    if(c.players&&Array.isArray(c.players)&&c.players.length===4){
+      const ps=c.players.map(function(id){if(id==null)return null;return S.members.find(function(m){return m.id===id;})||null;});
       body='<div class="vs-layout">'
         +'<div class="team-col">'+renderChip(ps[0],'court',c.id)+renderChip(ps[1],'court',c.id)+'</div>'
         +'<div class="vs-div">VS</div>'
@@ -2170,7 +2195,7 @@ function renderChip(player,type,courtId){
 
 function renderWaiting(){
   const playing=new Set();
-  S.courts.forEach(function(c){if(c.players)c.players.forEach(function(id){playing.add(id);});});
+  S.courts.forEach(function(c){if(c.players&&Array.isArray(c.players))c.players.forEach(function(id){if(id!=null)playing.add(id);});});
 
   // Partition members by status
   // セッション開始前 (todayParticipants空) は待機リストを空にする
@@ -2600,6 +2625,7 @@ function resetAllData(){
    SETTINGS
 ============================================================ */
 function openSettingsModal(){
+  updateClubCodeDisplay();
   const s=S.settings;
   document.getElementById('s-court-count').value=s.courtCount;
   document.getElementById('s-level-match').checked=s.levelMatch;
@@ -3057,6 +3083,73 @@ function createProjectFromQuick(){
   });
   closeModal('modal-newproj-quick');
   createNewProject();
+}
+
+/* ============================================================
+   SECURITY: CLUB CODE（入室コード）
+============================================================ */
+var CLUB_CODE_LS='bm_club_code';
+function getStoredCode(){try{return localStorage.getItem(CLUB_CODE_LS)||'';}catch(e){return '';}}
+function setStoredCode(c){try{localStorage.setItem(CLUB_CODE_LS,c);}catch(e){}}
+function getClubCode(){var g=loadGlobal();return(g&&g.clubCode)?g.clubCode:'';}
+function hasValidCode(){var code=getClubCode();if(!code)return true;return getStoredCode()===code;}
+function showCodeEntry(cb){
+  var ov=document.createElement('div');ov.id='code-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML='<div style="background:var(--bg2);border:1px solid var(--accent);border-radius:18px;padding:30px 20px;width:100%;max-width:300px;text-align:center">'
+    +'<div style="font-size:40px;margin-bottom:12px">🏸</div>'
+    +'<div style="font-family:var(--disp);font-size:22px;font-weight:700;color:var(--accent);margin-bottom:6px">Tachibana Badminton</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-bottom:18px">入室コードを入力してください</div>'
+    +'<input id="ci" type="text" placeholder="コードを入力" maxlength="20" autocomplete="off" style="width:100%;padding:13px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:16px;text-align:center;outline:none;margin-bottom:6px;box-sizing:border-box">'
+    +'<div id="ce" style="color:var(--red);font-size:11px;margin-bottom:10px;min-height:14px"></div>'
+    +'<button onclick="tryCode()" style="width:100%;padding:14px;background:var(--accent);border:none;border-radius:8px;color:#000;font-size:15px;font-weight:700;cursor:pointer">入室する</button>'
+    +'</div>';
+  document.body.appendChild(ov);window._codeCb=cb;
+  setTimeout(function(){var i=document.getElementById('ci');if(i){i.focus();i.onkeydown=function(e){if(e.key==='Enter')tryCode();};}},100);
+}
+function tryCode(){
+  var inp=document.getElementById('ci');if(!inp)return;
+  var val=inp.value.trim();var code=getClubCode();
+  if(!code||val===code){
+    setStoredCode(val);
+    var ov=document.getElementById('code-overlay');if(ov)ov.remove();
+    if(window._codeCb){window._codeCb(true);window._codeCb=null;}
+  }else{
+    var err=document.getElementById('ce');if(err)err.textContent='コードが違います';
+    inp.value='';inp.focus();
+  }
+}
+function fbSyncClubCode(){
+  if(!fbConnected||!fbDb)return;
+  try{firebase.database(fbApp).ref('meta/clubCode').on('value',function(snap){
+    var code=snap.val()||'';var g=loadGlobal()||{projects:[],currentId:null};
+    if(g.clubCode!==code){g.clubCode=code;saveGlobal(g);}
+  });}catch(ex){}
+}
+function setClubCode(){
+  if(!requireAdmin())return;
+  var inp=document.getElementById('new-club-code');
+  var code=inp?inp.value.trim():'';
+  if(!code){toast('コードを入力してください');return;}
+  var g=loadGlobal()||{projects:[],currentId:null};
+  g.clubCode=code;saveGlobal(g);setStoredCode(code);
+  if(fbConnected&&fbDb)firebase.database(fbApp).ref('meta/clubCode').set(code);
+  inp.value='';updateClubCodeDisplay();
+  toast('入室コードを設定しました: '+code);
+}
+function clearClubCode(){
+  if(!requireAdmin())return;
+  confirmDialog('入室コード解除','コードを解除すると誰でも入室できます。解除しますか？',function(){
+    var g=loadGlobal()||{};g.clubCode='';saveGlobal(g);setStoredCode('');
+    if(fbConnected&&fbDb)firebase.database(fbApp).ref('meta/clubCode').remove();
+    updateClubCodeDisplay();toast('入室コードを解除しました');
+  },'解除','danger');
+}
+function updateClubCodeDisplay(){
+  var el=document.getElementById('club-code-disp');if(!el)return;
+  var code=getClubCode();
+  el.textContent=code?('設定済: '+code):'未設定（誰でも入室可能）';
+  el.style.color=code?'var(--green)':'var(--orange)';
 }
 
 /* ============================================================
