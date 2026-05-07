@@ -390,7 +390,7 @@ textarea.field{resize:vertical;min-height:60px}
 <!-- ========== COURT PANE ========== -->
 <div class="pane active" id="pane-court">
   <div class="draw-hd">
-    <button class="draw-btn" id="draw-all-btn" onclick="drawAll()">🏸 抽選する</button>
+    <button class="draw-btn" id="draw-all-btn" onclick="drawAll()">👑🏸 抽選する</button>
     <button class="undo-btn" onclick="undoLast()" title="元に戻す">↩</button>
   </div>
   <div class="swap-hint on" id="swap-hint" style="display:none">選手タップ→別の選手タップで交換 / 空きスロットをタップで配置。キャンセルは同じ選手を再タップ</div>
@@ -471,7 +471,7 @@ textarea.field{resize:vertical;min-height:60px}
   </div>
 
   <div id="admin-member-btns" style="display:flex;gap:7px;margin-bottom:6px;flex-wrap:wrap">
-    <button class="btn primary sm" onclick="openAddMemberModal()">＋ メンバー追加</button>
+    <button class="btn primary sm" onclick="openAddMemberModal()">👑 ＋ メンバー追加</button>
     <button class="btn ghost sm"   onclick="openModal('modal-groups')">グループ管理</button>
     <button class="btn ghost sm"   onclick="openModal('modal-levels')">レベル管理</button>
   </div>
@@ -510,6 +510,12 @@ textarea.field{resize:vertical;min-height:60px}
 
 <!-- ========== DATA PANE ========== -->
 <div class="pane" id="pane-data">
+  <div id="data-nonadmin-msg" style="display:none;text-align:center;padding:40px 20px;color:var(--text3)">
+    <div style="font-size:36px;margin-bottom:12px">🔒</div>
+    <div style="font-size:14px;color:var(--text2);margin-bottom:6px">管理者専用エリア</div>
+    <div style="font-size:12px">データ管理は管理者のみ使用できます</div>
+  </div>
+  <div id="data-admin-section">
   <div class="sec-hd" style="margin-top:6px">
     <div class="sec-title">バックアップ・復元</div>
   </div>
@@ -1226,9 +1232,9 @@ function load(){
 
 function defaultLevels(){
   return [
-    {id:1, name:'強',  color:'#ff1744', order:0},
-    {id:2, name:'普通', color:'#00d4ff', order:1},
-    {id:3, name:'弱',  color:'#00e676', order:2}
+    {id:1, name:'強：ガンガンいこうぜ', shortName:'強', color:'#ff1744', order:0},
+    {id:2, name:'普：みんながんばれ',   shortName:'普', color:'#00d4ff', order:1},
+    {id:3, name:'緩：いのちだいじに',   shortName:'緩', color:'#00e676', order:2}
   ];
 }
 function defaultGroups(){
@@ -1339,7 +1345,16 @@ function switchTab(tab){
 /* ============================================================
    LEVELS
 ============================================================ */
-function getLevelById(id){ return S.levels.find(l=>l.id===id)||S.levels[0]||{id:0,name:'?',color:'#888',order:99}; }
+function getLevelById(id){
+  var l=S.levels.find(function(l){return l.id===id;});
+  if(!l) l=S.levels[0]||{id:0,name:'?',shortName:'?',color:'#888',order:99};
+  if(!l.shortName) l.shortName=l.name.charAt(0);
+  return l;
+}
+function getLevelShort(id){
+  var l=getLevelById(id);
+  return l.shortName||l.name.charAt(0);
+}
 function sortedLevels(){
   if(!S.levels||!S.levels.length) return [];
   return [...S.levels].sort(function(a,b){
@@ -1370,7 +1385,8 @@ function renderLevelsModal(){
     <div class="lvl-list-item" id="lvl-${l.id}" draggable="true" ondragstart="dragLvl(${l.id})" ondragover="dragOverLvl(event,${l.id})" ondrop="dropLvl(event,${l.id})">
       <span class="drag-handle">⠿</span>
       <div class="lvl-color-dot" style="background:${l.color}"></div>
-      <span style="flex:1;font-size:13px">${escH(l.name)}</span>
+      <span style="font-size:11px;font-weight:700;background:${l.color}22;color:${l.color};border:1px solid ${l.color};border-radius:4px;padding:1px 5px;flex-shrink:0">${escH(l.shortName||l.name.charAt(0))}</span>
+      <span style="flex:1;font-size:13px;margin-left:4px">${escH(l.name)}</span>
       <span style="font-size:11px;color:var(--text3);margin-right:8px">${S.members.filter(m=>m.levelId===l.id).length}人</span>
       <button class="btn ghost xs" onclick="editLevelInline(${l.id})">編集</button>
       <button class="btn danger xs" onclick="deleteLevel(${l.id})">削除</button>
@@ -1394,16 +1410,21 @@ function editLevelInline(id){
   const row = document.getElementById('lvl-'+id);
   row.innerHTML = `
     <span class="drag-handle">⠿</span>
-    <input type="color" value="${l.color}" id="ec-${id}" style="width:30px;height:30px;border:1px solid var(--border);border-radius:5px;background:none;cursor:pointer;padding:2px">
-    <input class="field sm" value="${escH(l.name)}" id="en-${id}" style="flex:1">
-    <button class="btn primary xs" onclick="saveLevelEdit(${id})">保存</button>
-    <button class="btn ghost xs" onclick="renderLevelsModal()">✕</button>
+    <input type="color" value="${l.color}" id="ec-${id}" style="width:30px;height:30px;border:1px solid var(--border);border-radius:5px;background:none;cursor:pointer;padding:2px;flex-shrink:0">
+    <div style="display:flex;flex-direction:column;gap:4px;flex:1">
+      <input class="field sm" value="${escH(l.name)}" id="en-${id}" placeholder="表示名（例: 強：ガンガンいこうぜ）">
+      <input class="field sm" value="${escH(l.shortName||l.name.charAt(0))}" id="es-${id}" placeholder="短縮名1〜3文字（例: 強）" maxlength="3">
+    </div>
+    <button class="btn primary xs" onclick="saveLevelEdit(${id})" style="flex-shrink:0">保存</button>
+    <button class="btn ghost xs" onclick="renderLevelsModal()" style="flex-shrink:0">✕</button>
   `;
 }
 function saveLevelEdit(id){
   const l=S.levels.find(x=>x.id===id); if(!l) return;
   l.name = document.getElementById('en-'+id).value.trim()||l.name;
   l.color = document.getElementById('ec-'+id).value;
+  var short = document.getElementById('es-'+id).value.trim();
+  l.shortName = short||l.name.charAt(0);
   save(); renderLevelsModal();
 }
 
@@ -2229,7 +2250,7 @@ function renderWaiting(){
       if(!grp.length) return;
       html+='<div style="display:flex;align-items:center;gap:6px;margin:8px 0 5px">'
         +'<div style="width:8px;height:8px;border-radius:50%;background:'+lvl.color+';flex-shrink:0"></div>'
-        +'<span style="font-size:10px;font-weight:700;color:'+lvl.color+';text-transform:uppercase;letter-spacing:.5px">'+escH(lvl.name)+'</span>'
+        +'<span style="font-size:10px;font-weight:700;color:'+lvl.color+';text-transform:uppercase;letter-spacing:.5px">'+escH(getLevelShort(lvl.id))+'</span>'
         +'<span style="font-size:10px;color:var(--text3)">'+grp.length+'人</span>'
         +'<div style="flex:1;height:1px;background:'+lvl.color+';opacity:.25"></div>'
         +'</div><div style="display:flex;flex-direction:column;gap:4px">';
@@ -2493,11 +2514,22 @@ function resetTodayFull(){
    DATA / BACKUP / STORAGE
 ============================================================ */
 function renderData(){
-  renderStorageList();
+  if(isAdmin()){
+    renderStorageList();
+    document.getElementById('data-admin-section').style.display='block';
+    document.getElementById('data-nonadmin-msg').style.display='none';
+  } else {
+    document.getElementById('data-admin-section').style.display='none';
+    document.getElementById('data-nonadmin-msg').style.display='block';
+  }
 }
 function renderStorageList(){
   const keys=[];
-  for(let i=0;i<localStorage.length;i++) keys.push(localStorage.key(i));
+  for(let i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    // Show only keys that belong to this app
+    if(k&&(k===STORAGE_KEY||k===GLOBAL_KEY||k.startsWith('bm_')||k===CLUB_CODE_LS)) keys.push(k);
+  }
   var gd=loadGlobal();
   var knownKeys={'bm_state':'BadmintonDraw v1 旧データ（不要な場合は削除可）'};
   knownKeys[STORAGE_KEY]='現在アクティブなプロジェクトのミラー（自動管理）';
