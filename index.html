@@ -496,6 +496,7 @@ textarea.field{resize:vertical;min-height:60px}
     <div class="sec-hd">
       <div class="sec-title">練習日一覧</div>
       <div style="display:flex;gap:5px">
+        <button class="btn ghost xs" onclick="showDeleteByDateDialog()">日付削除</button>
         <button class="btn danger xs" onclick="deleteAllSessions()">全削除</button>
       </div>
     </div>
@@ -1876,7 +1877,7 @@ function getAvailableForCourt(courtId){
   var sessionActive=(S.todayParticipants.length>0 || S.todayDate!=null);
   var sourceIds=sessionActive
     ? (S.todayParticipants.length?S.todayParticipants:S.members.map(m=>m.id))
-    : S.todayParticipants; // empty if no session
+    : S.members.map(m=>m.id); // session未開始でも全員を抽選対象に
   const pool=sourceIds
     .map(id=>S.members.find(m=>m.id===id))
     .filter(m=>m && m.status==='active' && !playing.has(m.id) && !isConsecBlocked(m));
@@ -2157,7 +2158,7 @@ function renderCourts(){
     lvlBtns+=buildLvlBtn(c.id,'any','ALL',anySet,'var(--text)','var(--text3)','var(--surface2)','var(--surface)','var(--border2)','var(--border)');
     sortedLevels().forEach(function(lv){
       const sel=(clv==lv.id||clv===String(lv.id));
-      lvlBtns+=buildLvlBtn(c.id,lv.id,escH(lv.name),sel,lv.color,lv.color,lv.color+'33','var(--surface)',lv.color,'var(--border)');
+      lvlBtns+=buildLvlBtn(c.id,lv.id,escH(lv.shortName||lv.name.charAt(0)),sel,lv.color,lv.color,lv.color+'33','var(--surface)',lv.color,'var(--border)');
     });
     lvlBtns+='</div>';
     let footer='';
@@ -2483,10 +2484,46 @@ function closeSessionDetail(){
   document.getElementById('session-list-view').style.display='block';
 }
 function deleteSession(id){
-  confirmDialog('セッション削除','このセッションデータを削除しますか？',()=>{
-    S.sessions=S.sessions.filter(s=>s.id!==id);
+  confirmDialog('セッション削除','このセッションデータを削除しますか？',function(){
+    S.sessions=S.sessions.filter(function(x){return x.id!==id;});
     save(); renderHistory();
   });
+}
+function closeDateDelModal(){var m=document.getElementById('date-del-modal');if(m)m.remove();}
+function showDeleteByDateDialog(){
+  if(!S.sessions||!S.sessions.length){toast('削除するデータがありません');return;}
+  var sorted=[...S.sessions].sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+  var opts=sorted.map(function(sess){
+    var cnt=sess.participants?sess.participants.length:0;
+    var games=sess.results?Math.floor(sess.results.reduce(function(a,r){return a+(r.games||0);},0)/4):0;
+    return '<label style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer">'
+      +'<input type="checkbox" value="'+sess.id+'" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">'
+      +'<span style="flex:1;font-size:13px">'+sess.date+'</span>'
+      +'<span style="font-size:11px;color:var(--text3)">'+cnt+'人 '+games+'試合</span>'
+      +'</label>';
+  }).join('');
+  var modal=document.createElement('div');
+  modal.id='date-del-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:600;display:flex;align-items:flex-end;justify-content:center';
+  modal.innerHTML='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px 16px 0 0;width:100%;max-width:640px;max-height:80dvh;overflow-y:auto;padding:20px 16px;padding-bottom:calc(20px + env(safe-area-inset-bottom))">'
+    +'<div style="font-family:var(--disp);font-size:18px;font-weight:700;margin-bottom:4px">🗓 日付を選んで削除</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-bottom:12px">削除したいセッションにチェック（ファイルは増えません）</div>'
+    +'<div id="date-del-list">'+opts+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:14px">'
+    +'<button class="btn danger" style="flex:1" onclick="execDateDelete()">選択削除</button>'
+    +'<button class="btn ghost" onclick="closeDateDelModal()">キャンセル</button>'
+    +'</div></div>';
+  document.body.appendChild(modal);
+}
+function execDateDelete(){
+  var checked=document.querySelectorAll('#date-del-list input:checked');
+  if(!checked.length){toast('削除するセッションを選択してください');return;}
+  var ids=Array.from(checked).map(function(c){return parseInt(c.value);});
+  confirmDialog('選択削除',ids.length+'件のセッションを削除しますか？元に戻せません。',function(){
+    S.sessions=S.sessions.filter(function(x){return !ids.includes(x.id);});
+    closeDateDelModal();
+    save(); renderHistory(); toast(ids.length+'件削除しました');
+  },'削除','danger');
 }
 function deleteAllSessions(){
   confirmDialog('全セッション削除','全ての成績データを削除しますか？この操作は取り消せません。',()=>{
@@ -2502,7 +2539,8 @@ function resetTodayFull(){
   confirmDialog('本日データをリセット', msg,
     function(){
       S.members.forEach(function(m){
-        m.consecutiveGames=0; m.lastWaitStart=Date.now(); m.status='active';
+        m.consecutiveGames=0; m.lastWaitStart=Date.now();
+        m.lastGameEndTime=null; m.lastGameStartTime=null; m.status='active';
       });
       S.courts.forEach(function(c){ c.players=null; c.confirmed=false; });
       S.todayParticipants=[]; S.todayDate=null;
@@ -2532,9 +2570,14 @@ function renderStorageList(){
   }
   var gd=loadGlobal();
   var knownKeys={'bm_state':'BadmintonDraw v1 旧データ（不要な場合は削除可）'};
-  knownKeys[STORAGE_KEY]='現在アクティブなプロジェクトのミラー（自動管理）';
-  if(typeof GLOBAL_KEY!=='undefined') knownKeys[GLOBAL_KEY]='プロジェクト一覧グローバルデータ';
-  if(gd) gd.projects.forEach(function(p){ knownKeys[getProjectKey(p.id)]='プロジェクト「'+p.name+'」のデータ'; });
+  knownKeys[STORAGE_KEY]='【現在のプロジェクト】アクティブなプロジェクトのデータ（自動管理・削除不要）';
+  knownKeys[GLOBAL_KEY]='【プロジェクト一覧】年度一覧と設定。削除すると全プロジェクトが消える。';
+  knownKeys[CLUB_CODE_LS]='【入室コード】この端末に保存されたコード。削除すると次回再入力が必要。';
+  knownKeys['bm_admin_local']='【端末認証】この端末のメンバーID。削除すると管理者権限が失われる。';
+  knownKeys['bm_state']='【旧バージョン】v1データ。v2インポート済みなら削除可。';
+  if(gd) gd.projects.forEach(function(p){
+    knownKeys[getProjectKey(p.id)]='【プロジェクト】「'+p.name+'」のメンバー・試合・設定データ'+(p.id===gd.currentId?' ←現在使用中':'');
+  });
   var knownKeys=knownKeys;
   const totalSize=keys.reduce((s,k)=>{
     try{ return s+(localStorage.getItem(k)||'').length; }catch(e){ return s; }
