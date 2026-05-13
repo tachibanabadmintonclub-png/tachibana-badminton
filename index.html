@@ -1899,33 +1899,30 @@ function pickRandom(arr,n){
   return r.length===n?r:null;
 }
 function buildLevelSearchOrder(clvStr, pool){
-  // Returns candidates list, sorted by level priority (target→weaker→stronger)
+  // ALLは全員から抽選
   if(clvStr==='any') return pool;
+
   var targetId=parseInt(clvStr);
   var lvlsSorted=sortedLevels();
   var targetIdx=lvlsSorted.findIndex(function(l){return l.id===targetId;});
   if(targetIdx<0) return pool;
 
-  // searchOrder: target → weaker direction → stronger direction
-  var searchOrder=[];
-  for(var i=targetIdx;i<lvlsSorted.length;i++) searchOrder.push(lvlsSorted[i].id);
-  for(var i=targetIdx-1;i>=0;i--) searchOrder.push(lvlsSorted[i].id);
+  // 指定レベルのメンバーを優先、不足分は試合数少ない順で他レベルから補充
+  var preferred=pool.filter(function(m){return m.levelId===targetId;});
 
-  // Try to find 4 from a single level first
-  for(var si=0;si<searchOrder.length;si++){
-    var lid=searchOrder[si];
-    var f=pool.filter(function(m){return m.levelId===lid;});
-    if(f.length>=4) return f;
+  if(preferred.length>=4){
+    // 指定レベルだけで4人揃う → 試合数少ない順で返す
+    return preferred.sort(function(a,b){return (a.consecutiveGames||0)-(b.consecutiveGames||0);});
   }
-  // Mix levels: from weakest toward strongest until 4 accumulated
-  var mixed=[];
-  for(var si=searchOrder.length-1;si>=0;si--){
-    var lid=searchOrder[si];
-    mixed=mixed.concat(pool.filter(function(m){return m.levelId===lid;}));
-    if(mixed.length>=4) return mixed;
-  }
-  // Less than 4 available — return all we have (partial fill)
-  return mixed.length>0 ? mixed : pool;
+
+  // 不足分を他レベルから補充（試合数少ない順）
+  var others=pool.filter(function(m){return m.levelId!==targetId;});
+  others.sort(function(a,b){return (a.consecutiveGames||0)-(b.consecutiveGames||0);});
+  var needed=4-preferred.length;
+  var fill=others.slice(0,needed);
+
+  // 指定レベル全員＋補充メンバーを返す
+  return preferred.concat(fill);
 }
 
 function drawForCourt(courtId){
@@ -1943,17 +1940,28 @@ function drawForCourt(courtId){
     return 'empty';
   }
 
-  const sorted=sortByPriority(candidates);
-  const top=sorted.slice(0,Math.min(10,sorted.length));
-  const needed=4;
+  // buildLevelSearchOrderが優先順に並べて返す
+  // 指定レベル優先・不足は試合数少ない順補充済みなので先頭4人を使う
   var picked=[];
-
-  if(top.length>=needed){
-    picked=pickRandom(top,needed);
+  if(candidates.length>=4){
+    // 4人以上いる場合：指定レベルは全員確定、残りはsortByPriorityで選択
+    var preferred2=candidates.filter(function(m){
+      var clv=S.settings.courtLevels[courtId]||'any';
+      return clv==='any'||m.levelId===parseInt(clv);
+    });
+    var others2=candidates.filter(function(m){
+      var clv=S.settings.courtLevels[courtId]||'any';
+      return clv!=='any'&&m.levelId!==parseInt(clv);
+    });
+    // 指定レベルから最大4人、不足を他レベルから試合数少ない順
+    var sel=sortByPriority(preferred2).slice(0,4);
+    if(sel.length<4){
+      var fill2=sortByPriority(others2).slice(0,4-sel.length);
+      sel=sel.concat(fill2);
+    }
+    picked=sel;
   } else {
-    // 4人に満たない場合：いる人を全員入れて残りはnull
-    var shuffled=top.slice().sort(function(){return Math.random()-0.5;});
-    picked=shuffled;
+    picked=candidates;
   }
 
   // 4スロット分配列を作り、足りない分はnullで埋める
