@@ -393,6 +393,10 @@ textarea.field{resize:vertical;min-height:60px}
     <button class="draw-btn" id="draw-all-btn" onclick="drawAll()">👑🏸 抽選する</button>
     <button class="undo-btn" onclick="undoLast()" title="元に戻す">↩</button>
   </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+    <button class="btn primary full" id="all-start-btn" onclick="confirmAllCourts()" style="font-size:13px;padding:10px">✅ 全試合開始</button>
+    <button class="btn warn full" id="all-finish-btn" onclick="finishAllCourts()" style="font-size:13px;padding:10px">🏁 全試合終了</button>
+  </div>
   <div class="swap-hint on" id="swap-hint" style="display:none">選手タップ→別の選手タップで交換 / 空きスロットをタップで配置。キャンセルは同じ選手を再タップ</div>
   <div id="courts-container"></div>
   <!-- Face legend -->
@@ -2198,6 +2202,11 @@ function renderCourts(){
       +'</div><div class="court-body">'+body+'</div>'+footer+'</div>';
   });
   document.getElementById('courts-container').innerHTML=out;
+  var anyUnstarted=S.courts.some(function(c){return c.players&&c.players.some(function(p){return p!=null;})&&!c.confirmed;});
+  var anyActive=S.courts.some(function(c){return c.players&&c.players.some(function(p){return p!=null;});});
+  var sb=document.getElementById('all-start-btn'), fb=document.getElementById('all-finish-btn');
+  if(sb) sb.style.opacity=anyUnstarted?'1':'0.4';
+  if(fb) fb.style.opacity=anyActive?'1':'0.4';
 }
 function buildLvlBtn(cid,val,label,sel,sc,dc,sbg,dbg,sb,db){
   var bg=sel?sbg:dbg, color=sel?sc:dc, border=sel?sb:db;
@@ -2255,30 +2264,29 @@ function renderWaiting(){
   // Update count badge (waiting only)
   document.getElementById('wait-count-badge').textContent=waiting.length+'人';
 
-  const maxG=Math.max.apply(null,pool.map(function(m){return m.totalGames;}).concat([1]));
+  const maxG=Math.max.apply(null,pool.map(function(m){return m.todayGames||0;}).concat([1]));
   const sw=S.swapMode;
 
   // Render face legend
   renderFaceLegend();
 
   // --- WAITING zone ---
+  var emptyMsg=hasSession?'全員参加中または休憩中':'「本日」タブで参加メンバーを選択してセッションを開始してください';
   if(!waiting.length){
-    document.getElementById('waiting-list').innerHTML='<span style="color:var(--text3);font-size:11px;padding:4px 0;display:block">全員参加中または休憩中</span>';
+    document.getElementById('waiting-list').innerHTML='<span style="color:var(--text3);font-size:11px;padding:6px 0;display:block">'+emptyMsg+'</span>';
+    document.getElementById('wait-count-badge').textContent='0人';
   } else {
-    var html='';
-    sortedLevels().forEach(function(lvl){
-      var grp=waiting.filter(function(m){return m.levelId===lvl.id;});
-      if(!grp.length) return;
-      html+='<div style="display:flex;align-items:center;gap:6px;margin:8px 0 5px">'
-        +'<div style="width:8px;height:8px;border-radius:50%;background:'+lvl.color+';flex-shrink:0"></div>'
-        +'<span style="font-size:10px;font-weight:700;color:'+lvl.color+';text-transform:uppercase;letter-spacing:.5px">'+escH(getLevelShort(lvl.id))+'</span>'
-        +'<span style="font-size:10px;color:var(--text3)">'+grp.length+'人</span>'
-        +'<div style="flex:1;height:1px;background:'+lvl.color+';opacity:.25"></div>'
-        +'</div><div style="display:flex;flex-direction:column;gap:4px">';
-      grp.forEach(function(m){ html+=buildWaitCard(m,maxG,sw,'active'); });
-      html+='</div>';
+    var lvlOrder={};
+    sortedLevels().forEach(function(l,i){lvlOrder[l.id]=i;});
+    var waitSorted=waiting.slice().sort(function(a,b){
+      var ga=a.todayGames||0, gb=b.todayGames||0;
+      if(ga!==gb) return ga-gb;
+      return (lvlOrder[a.levelId]||0)-(lvlOrder[b.levelId]||0);
     });
-    document.getElementById('waiting-list').innerHTML=html;
+    var whtml='<div style="display:flex;flex-direction:column;gap:4px">';
+    waitSorted.forEach(function(m){ whtml+=buildWaitCard(m,maxG,sw,'active'); });
+    whtml+='</div>';
+    document.getElementById('waiting-list').innerHTML=whtml;
   }
 
   // --- RESTING zone ---
@@ -2317,7 +2325,8 @@ function renderWaiting(){
 function buildWaitCard(m, maxG, sw, zone){
   var isSel=sw.active&&sw.source&&sw.source.id===m.id&&sw.source.type==='wait';
   var isTgt=sw.active&&!isSel;
-  var barPct=Math.round(m.totalGames/maxG*100);
+  var todayG=m.todayGames||0;
+  var barPct=Math.round(todayG/maxG*100);
   var face=getFace(m);
   var lvl=getLevelById(m.levelId);
   var bord=isSel?'var(--yellow)':isTgt?'var(--accent)':
@@ -2371,20 +2380,12 @@ function renderFaceLegend(){
   var el=document.getElementById('face-legend-items'); if(!el) return;
   // Build legend items with threshold range labels
   var html='';
-  faces.forEach(function(f,i){
-    var next=faces[i+1];
-    var range;
-    if(i===0) range='0試合';
-    else if(!next) range=f.games+'試合以上';
-    else range=f.games+'〜'+(next.games-1)+'試合';
-    html+='<div style="display:flex;align-items:center;gap:4px;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:3px 8px">'
-      +'<span style="font-size:16px">'+f.face+'</span>'
-      +'<div>'
-      +'<div style="font-size:10px;font-weight:600;color:var(--text2)">'+escH(f.label)+'</div>'
-      +'<div style="font-size:9px;color:var(--text3)">'+range+'</div>'
-      +'</div>'
+  faces.forEach(function(f){
+    html+='<div style="display:flex;align-items:center;gap:3px;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-size:12px">'
+      +f.face+'<span style="font-size:9px;color:var(--text3)">'+f.games+'〜</span>'
       +'</div>';
   });
+  
   el.innerHTML=html;
 }
 
@@ -3257,6 +3258,45 @@ function updateClubCodeDisplay(){
   var code=getClubCode();
   el.textContent=code?('設定済: '+code):'未設定（誰でも入室可能）';
   el.style.color=code?'var(--green)':'var(--orange)';
+}
+
+function confirmAllCourts(){
+  if(!requireAdmin()) return;
+  pushHistory();
+  var n=0, now=Date.now();
+  S.courts.forEach(function(c){
+    if(c.players&&!c.confirmed){
+      c.players.forEach(function(pid){
+        if(pid===null) return;
+        var m=S.members.find(function(x){return x.id===pid;}); if(!m) return;
+        m.totalGames++; m.consecutiveGames++;
+        if(!m.todayGames) m.todayGames=0; m.todayGames++;
+        m.lastWaitStart=null; m.lastDate=todayStr(); m.lastGameStartTime=now;
+      });
+      c.confirmed=true; n++;
+    }
+  });
+  if(n>0){ save(); renderCourts(); renderWaiting(); renderTodayRanking(); toast(n+'コート 試合開始！ 🏸'); }
+  else toast('開始できるコートがありません');
+}
+function finishAllCourts(){
+  if(!requireAdmin()) return;
+  pushHistory();
+  var n=0, now=Date.now();
+  S.courts.forEach(function(c){
+    if(c.players){
+      if(c.confirmed){
+        c.players.forEach(function(pid){
+          if(pid===null) return;
+          var m=S.members.find(function(x){return x.id===pid;}); if(!m) return;
+          m.lastGameEndTime=now; m.lastWaitStart=now;
+        });
+      }
+      c.players=null; c.confirmed=false; n++;
+    }
+  });
+  if(n>0){ save(); renderCourts(); renderWaiting(); renderTodayRanking(); toast(n+'コート 試合終了'); }
+  else toast('進行中のコートがありません');
 }
 
 /* ============================================================
