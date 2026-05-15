@@ -1312,9 +1312,19 @@ function autoEndSession(){
   toast('日付が変わりました。前日データを保存してリセットしました。');
 }
 function autoResetDay(){
+  var today=todayStr();
   S.members.forEach(function(m){
-    m.consecutiveGames=0; m.lastWaitStart=Date.now();
-    m.status='active'; // ステータスリセット
+    m.consecutiveGames=0; m.todayGames=0;
+    m.lastWaitStart=Date.now();
+    m.lastGameEndTime=null; m.lastGameStartTime=null;
+    m.status='active';
+    // lastDateを今日でなければそのまま、今日なら前回セッションの日付に戻す
+    if(m.lastDate===today){
+      var prevSess=S.sessions.slice().reverse().find(function(s){
+        return s.date!==today && s.participants && s.participants.includes(m.id);
+      });
+      m.lastDate=prevSess?prevSess.date:null;
+    }
   });
   S.courts.forEach(function(c){ c.players=null; c.confirmed=false; });
   S.todayParticipants=[]; S.todayDate=null;
@@ -1671,7 +1681,7 @@ function getRate(m){
 function getFace(m){
   const thresh=S.settings.faceThresholds||defaultFaces();
   // find by today's games (use consecutive as proxy for today)
-  const todayGames=m.consecutiveGames||0;
+  const todayGames=m.todayGames||0;
   for(const t of [...thresh].sort((a,b)=>b.games-a.games)){
     if(todayGames>=t.games) return t.face;
   }
@@ -1755,19 +1765,19 @@ function renderToday(){
 function renderTodayRanking(){
   var el=document.getElementById('today-ranking-list'); if(!el) return;
   if(!S.todayParticipants.length){ el.innerHTML='<div style="color:var(--text3);font-size:12px;padding:8px 0">セッション開始後に表示されます</div>'; return; }
-  var maxG=Math.max.apply(null,S.todayParticipants.map(function(id){var m=S.members.find(function(x){return x.id===id;});return m?m.consecutiveGames:0;}).concat([1]));
+  var maxG=Math.max.apply(null,S.todayParticipants.map(function(id){var m=S.members.find(function(x){return x.id===id;});return m?(m.todayGames||0):0;}).concat([1]));
   var ranked=S.todayParticipants.map(function(id){return S.members.find(function(m){return m.id===id;});}).filter(Boolean)
     .sort(function(a,b){return b.consecutiveGames-a.consecutiveGames;});
   el.innerHTML=ranked.map(function(m,i){
     var lvl=getLevelById(m.levelId);
-    var pct=maxG>0?Math.round(m.consecutiveGames/maxG*100):0;
+    var pct=maxG>0?Math.round((m.todayGames||0)/maxG*100):0;
     return '<div class="rank-row">'
       +'<div class="rank-num '+(i===0?'g':i===1?'s':i===2?'b':'')+'">'+(i+1)+'</div>'
       +'<div class="rank-bar-w">'
       +'<div class="rank-name">'+escH(m.name)+' <span style="font-size:10px;color:'+lvl.color+'">'+escH(lvl.name)+'</span></div>'
       +'<div class="rank-bg"><div class="rank-bar-fill" style="width:'+pct+'%;background:'+lvl.color+'"></div></div>'
       +'</div>'
-      +'<div class="rank-cnt">'+m.consecutiveGames+'</div>'
+      +'<div class="rank-cnt">'+(m.todayGames||0)+'</div>'
       +'</div>';
   }).join('');
 }
@@ -2017,6 +2027,7 @@ function revertCourtConfirm(c){
     var m=S.members.find(function(x){return x.id===pid;}); if(!m) return;
     if(m.totalGames>0) m.totalGames--;
     if(m.consecutiveGames>0) m.consecutiveGames--;
+    if(m.todayGames>0) m.todayGames--;
     m.lastWaitStart=Date.now();
     m.lastGameEndTime=Date.now();
   });
@@ -2031,6 +2042,7 @@ function confirmCourt(courtId){
     if(pid===null) return; // 空きスロットはスキップ
     var m=S.members.find(x=>x.id===pid); if(!m) return;
     m.totalGames++; m.consecutiveGames++;
+    if(!m.todayGames) m.todayGames=0; m.todayGames++;
     m.lastWaitStart=null;
     m.lastDate=todayStr();
     m.lastGameStartTime=now;
@@ -2338,7 +2350,7 @@ function buildWaitCard(m, maxG, sw, zone){
     +'<div onclick="'+fn+'" style="width:26px;height:26px;border-radius:50%;background:'+lvl.color+'22;color:'+lvl.color+';display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-size:11px;font-weight:700;flex-shrink:0;cursor:pointer">'+getInitial(m.name)+'</div>'
     +'<div style="flex:1;min-width:0;cursor:pointer" onclick="'+fn+'">'
     +'<div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escH(m.name)+'</div>'
-    +'<div style="font-size:10px;color:var(--text3);margin-top:1px">試合数:'+m.totalGames+(m.consecutiveGames?' 本日:'+m.consecutiveGames:'')+'</div>'
+    +'<div style="font-size:10px;color:var(--text3);margin-top:1px">試合数:'+m.totalGames+(m.todayGames?' 本日:'+m.todayGames:'')+'</div>'
     +'</div>'
     +'<div style="font-size:18px;flex-shrink:0">'+face+'</div>'
     +'<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">'
@@ -2546,9 +2558,21 @@ function resetTodayFull(){
   var msg='本日の以下のデータをリセットします：\n\n'+items+'\n\n※ 成績画面の過去データには影響しません。\n本当にリセットしますか？';
   confirmDialog('本日データをリセット', msg,
     function(){
+      var today=todayStr();
       S.members.forEach(function(m){
-        m.consecutiveGames=0; m.lastWaitStart=Date.now();
+        // totalGamesから本日加算分を差し引く
+        var todayCount=m.todayGames||0;
+        m.totalGames=Math.max(0,(m.totalGames||0)-todayCount);
+        m.consecutiveGames=0; m.todayGames=0;
+        m.lastWaitStart=Date.now();
         m.lastGameEndTime=null; m.lastGameStartTime=null; m.status='active';
+        // lastDateを本日以前の最終参加日に戻す
+        if(m.lastDate===today){
+          var prevSess=S.sessions.slice().reverse().find(function(s){
+            return s.date!==today && s.participants && s.participants.includes(m.id);
+          });
+          m.lastDate=prevSess?prevSess.date:null;
+        }
       });
       S.courts.forEach(function(c){ c.players=null; c.confirmed=false; });
       S.todayParticipants=[]; S.todayDate=null;
