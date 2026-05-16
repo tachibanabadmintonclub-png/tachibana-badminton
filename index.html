@@ -1454,8 +1454,39 @@ function renderLevelsModal(){
       <button class="btn danger xs" onclick="deleteLevel(${l.id})">削除</button>
     </div>
   `).join('');
+  initTouchDrag('levels-list');
 }
 let dragSrcLvl=null;
+function initTouchDrag(listId){
+  var list=document.getElementById(listId); if(!list) return;
+  var dragEl=null;
+  list.querySelectorAll('[draggable="true"]').forEach(function(item){
+    item.addEventListener('touchstart',function(e){
+      dragEl=item; dragEl.style.opacity='0.6';
+    },{passive:true});
+    item.addEventListener('touchmove',function(e){
+      if(!dragEl) return; e.preventDefault();
+      var ty=e.touches[0].clientY;
+      Array.from(list.querySelectorAll('[draggable="true"]')).forEach(function(it){
+        if(it===dragEl) return;
+        var r=it.getBoundingClientRect();
+        if(ty>r.top+r.height*0.5) it.after(dragEl); else if(ty<r.top+r.height*0.5) it.before(dragEl);
+      });
+    },{passive:false});
+    item.addEventListener('touchend',function(){
+      if(!dragEl) return; dragEl.style.opacity='1';
+      var items=Array.from(list.querySelectorAll('[draggable="true"]'));
+      if(listId==='levels-list'){
+        items.forEach(function(el,i){ var l=S.levels.find(function(x){return x.id===parseInt(el.id.replace('lvl-',''));}); if(l) l.order=i; });
+        save(); renderLevelsModal();
+      } else {
+        items.forEach(function(el,i){ var g=S.groups.find(function(x){return x.id===parseInt(el.id.replace('grp-',''));}); if(g) g.order=i; });
+        save(); renderGroupsModal();
+      }
+      dragEl=null;
+    },{passive:true});
+  });
+}
 function dragLvl(id){dragSrcLvl=id;}
 function dragOverLvl(e,id){e.preventDefault();}
 function dropLvl(e,id){
@@ -1522,6 +1553,7 @@ function renderGroupsModal(){
       <button class="btn danger xs" onclick="deleteGroup(${g.id})">削除</button>
     </div>
   `).join('');
+  initTouchDrag('groups-list');
 }
 function editGroupInline(id){
   const g=S.groups.find(x=>x.id===id); if(!g) return;
