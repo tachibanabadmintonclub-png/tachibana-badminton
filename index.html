@@ -1172,11 +1172,16 @@ function createNewProject(){
     memberSort:S.memberSort, memberYear:CURRENT_YEAR,
     swapMode:{active:false,source:null}, _ts:0
   };
-  localStorage.setItem(getProjectKey(nid),JSON.stringify(ns));
   document.getElementById('new-proj-name').value='';
   closeAllModals();
   g.currentId=nid; saveGlobal(g);
-  Object.assign(S,ns); syncCourts();
+  ns._ts = Date.now(); // mark timestamp to prevent old Firebase data overwriting
+  localStorage.setItem(getProjectKey(nid), JSON.stringify(ns)); // save again with _ts
+  Object.assign(S, ns); syncCourts();
+  // Firebase: switch listener to new project path
+  fbResubscribe();
+  // Push new (empty) project to Firebase
+  fbPush();
   // タブをコートに戻してレンダリング
   currentTab='court';
   ['court','today','member','history','data'].forEach(function(t){
