@@ -830,6 +830,8 @@ textarea.field{resize:vertical;min-height:60px}
   </div>
 </div>
 </
+<div class="toast" id="toast"></div>
+
 <script>
 /* ============================================================
    STATE SCHEMA
@@ -1523,13 +1525,12 @@ function renderGroupsModal(){
 }
 function editGroupInline(id){
   const g=S.groups.find(x=>x.id===id); if(!g) return;
-  const row=document.getElementById('grp-'+id);
-  row.innerHTML=`
-    <input type="color" value="${g.color}" id="gc-${id}" style="width:30px;height:30px;border:1px solid var(--border);border-radius:5px;background:none;cursor:pointer;padding:2px">
-    <input class="field sm" value="${escH(g.name)}" id="gn-${id}" style="flex:1">
-    <button class="btn primary xs" onclick="saveGroupEdit(${id})">保存</button>
-    <button class="btn ghost xs" onclick="renderGroupsModal()">✕</button>
-  `;
+  const row=document.getElementById('grp-'+id); if(!row) return;
+  row.innerHTML='<span class="drag-handle">⠿</span>'
+    +'<input type="color" value="'+g.color+'" id="gc-'+id+'" style="width:30px;height:30px;border:1px solid var(--border);border-radius:5px;background:none;cursor:pointer;padding:2px;flex-shrink:0">'
+    +'<input class="field sm" value="'+escH(g.name)+'" id="gn-'+id+'" style="flex:1">'
+    +'<button class="btn primary xs" onclick="saveGroupEdit('+JSON.stringify(id)+')">保存</button>'
+    +'<button class="btn ghost xs" onclick="renderGroupsModal()">✕</button>';
 }
 function saveGroupEdit(id){
   const g=S.groups.find(x=>x.id===id); if(!g) return;
@@ -2848,18 +2849,17 @@ function saveCoreSettings(){
 }
 function renderFaceSettings(){
   const faces=S.settings.faceThresholds||defaultFaces();
-  document.getElementById('face-settings-rows').innerHTML=faces.map((f,i)=>`
-    <div class="face-row">
-      <div class="face-row-icon">${f.face}</div>
-      <div class="face-row-info">
-        <div>${escH(f.label)}</div>
-        <div class="face-row-thresh">${i===faces.length-1?'0試合以下から':'試合数 ≥ '}
-          <input type="number" class="num-inp" value="${f.games}" min="0" max="99" style="width:48px" onchange="saveFaceThreshold(${i},this.value)">
-        </div>
-      </div>
-      <input type="text" class="field sm" value="${f.face}" maxlength="2" style="width:44px;text-align:center" placeholder="😊" onchange="saveFaceEmoji(${i},this.value)">
-    </div>
-  `).join('');
+  document.getElementById('face-settings-rows').innerHTML=faces.map(function(f,i){
+    return '<div class="face-row">'
+      +'<div class="face-row-icon">'+f.face+'</div>'
+      +'<div class="face-row-info">'
+      +'<div>'+escH(f.label)+'</div>'
+      +'<div class="face-row-thresh">'+(i===faces.length-1?'0試合以下から':'試合数 ≥ ')
+      +'<input type="number" class="num-inp" value="'+f.games+'" min="0" max="99" style="width:48px" onchange="saveFaceThreshold('+i+',this.value)">'
+      +'</div></div>'
+      +'<input type="text" class="field sm" value="'+escH(f.face)+'" maxlength="2" style="width:44px;text-align:center" placeholder="😊" onchange="saveFaceEmoji('+i+',this.value)">'
+      +'</div>';
+  }).join('');
 }
 function saveFaceThreshold(i,v){
   if(S.settings.faceThresholds[i]) S.settings.faceThresholds[i].games=parseInt(v)||0;
