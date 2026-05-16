@@ -829,7 +829,20 @@ textarea.field{resize:vertical;min-height:60px}
     <div class="pin-key cancel" onclick="pinCancel()">✕</div>
   </div>
 </div>
-</
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-title" id="confirm-title"></div>
+    <div class="confirm-msg" id="confirm-msg"></div>
+    <div class="confirm-btns">
+      <button class="btn ghost" onclick="confirmCancel()">キャンセル</button>
+      <button class="btn danger" id="confirm-ok-btn" onclick="confirmOk()">削除</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -2937,12 +2950,18 @@ function closeBgModal(e,id){ if(e.target===document.getElementById(id)) closeMod
 let _confirmCallback=null;
 function confirmDialog(title,msg,cb,okLabel,okStyle){
   okLabel=okLabel||'削除'; okStyle=okStyle||'danger';
-  document.getElementById('confirm-title').textContent=title;
-  const msgEl=document.getElementById('confirm-msg');
-  msgEl.innerHTML=msg.replace(/\n/g,'<br>');
-  const okBtn=document.getElementById('confirm-ok-btn');
-  okBtn.textContent=okLabel;
-  okBtn.className='btn '+okStyle;
+  var _t=document.getElementById('confirm-title');
+  var _m=document.getElementById('confirm-msg');
+  var _b=document.getElementById('confirm-ok-btn');
+  var _o=document.getElementById('confirm-overlay');
+  if(!_t||!_m||!_b||!_o){
+    if(window.confirm(title+'\n\n'+msg)){if(cb)cb();}
+    return;
+  }
+  _t.textContent=title;
+  _m.innerHTML=msg.replace(/\n/g,'<br>');
+  _b.textContent=okLabel;
+  _b.className='btn '+okStyle;
   _confirmCallback=cb;
   document.getElementById('confirm-overlay').classList.add('open');
 }
@@ -2979,7 +2998,7 @@ function goToIdentityFromAdmin(){
 }
 function closeAllModals(){
   document.querySelectorAll('.modal-bd').forEach(function(el){ el.classList.remove('open'); });
-  document.getElementById('confirm-overlay').classList.remove('open');
+  var _co=document.getElementById('confirm-overlay'); if(_co) _co.classList.remove('open');
 }
 function renderAll(){
   if(!document.getElementById('courts-container')) return;
