@@ -524,11 +524,20 @@ textarea.field{resize:vertical;min-height:60px}
   <div class="sec-hd" style="margin-top:6px">
     <div class="sec-title">バックアップ・復元</div>
   </div>
-  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
-    <button class="btn primary sm" onclick="exportBackup()">📤 エクスポート</button>
-    <button class="btn ghost sm"   onclick="triggerImport()">📥 インポート</button>
+  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:4px">
+    <button class="btn primary sm" onclick="exportBackup()">📤 全データ書出し</button>
+    <button class="btn ghost sm"   onclick="triggerImport()">📥 全データ読込み</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importBackup(event)">
   </div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:10px">全データ（メンバー・成績・設定すべてを含む）</div>
+  <div class="sec-hd">
+    <div class="sec-title">メンバー情報のみ</div>
+  </div>
+  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:4px">
+    <button class="btn ghost sm" onclick="exportMembers()">👥 メンバー書出し</button>
+    <button class="btn ghost sm" onclick="importMembers()">👥 メンバー読込み</button>
+  </div>
+  <div style="font-size:10px;color:var(--text3);margin-bottom:10px">試合数・成績を除いたメンバー情報のみ</div>
   <div id="backup-list"></div>
 
   <div class="div"></div>
@@ -820,24 +829,7 @@ textarea.field{resize:vertical;min-height:60px}
     <div class="pin-key cancel" onclick="pinCancel()">✕</div>
   </div>
 </div>
-</div>
-
-<!-- CONFIRM DIALOG -->
-<div class="confirm-overlay" id="confirm-overlay">
-  <div class="confirm-box">
-    <div class="confirm-title" id="confirm-title">確認</div>
-    <div class="confirm-msg" id="confirm-msg"></div>
-    <div class="confirm-btns">
-      <button class="btn ghost" onclick="confirmCancel()">キャンセル</button>
-      <button class="btn danger" id="confirm-ok-btn" onclick="confirmOk()">削除</button>
-    </div>
-  </div>
-</div>
-
-<!-- TOAST -->
-<div class="toast" id="toast"></div>
-
-<script>
+</
 /* ============================================================
    STATE SCHEMA
 ============================================================ */
@@ -974,17 +966,32 @@ function fbApplyGlobal(d){
   if(!d) return;
   var inTs=d._ts||0;
   if(inTs>0 && inTs===fbLastPush) return;
-  // Update global project list
   if(d.projects&&Array.isArray(d.projects)){
     var g=loadGlobal()||{projects:[],currentId:null};
-    // Merge: keep local currentId, update project list
-    var localCurrent=g.currentId;
+    // Accept Firebase's project list (it's the source of truth)
+    // Only apply if Firebase data is newer
+    if(inTs>0 && inTs<=(g._ts||0)) return;
     g.projects=d.projects;
-    if(!g.projects.find(function(p){return p.id===localCurrent;})){
+    g._ts=inTs;
+    // If current project was deleted, switch to first available
+    if(!g.projects.find(function(p){return p.id===g.currentId;})){
       g.currentId=d.currentId||g.projects[0]?.id;
+      saveGlobal(g);
+      if(g.currentId){
+        // Remove deleted project data from localStorage
+        Object.keys(localStorage).forEach(function(k){
+          if(k.startsWith('bm_proj_')&&!g.projects.find(function(p){return getProjectKey(p.id)===k;})){
+            localStorage.removeItem(k);
+          }
+        });
+        switchProject(g.currentId);
+      }
+    } else {
+      g.currentId=d.currentId||g.currentId;
+      saveGlobal(g);
     }
-    saveGlobal(g);
     updateCurrentProjectBadge();
+    updateHeaderProjectNav();
     if(currentTab==='member') renderMembers();
     console.log('[FB] global synced, projects='+d.projects.length);
   }
@@ -1045,9 +1052,8 @@ function loadGlobal(){
   }catch(e){ return null; }
 }
 function saveGlobal(g){
+  if(!g._ts) g._ts=Date.now();
   try{ localStorage.setItem(GLOBAL_KEY,JSON.stringify(g)); }catch(e){}
-  // Sync global to Firebase (debounced via fbPush which also pushes global)
-  // fbPush will be called by save() after project operations
 }
 function getProjectKey(id){ return 'bm_proj_'+String(id); }
 function getCurrentProject(){
@@ -1125,13 +1131,31 @@ function createNewProject(){
   var g=loadGlobal()||{projects:[],currentId:null};
   var nid='proj_'+Date.now();
   g.projects.push({id:nid,name:name,createdAt:Date.now()});
-  var ns=JSON.parse(JSON.stringify(S));
-  ns.sessions=[]; ns.todayParticipants=[]; ns.todayDate=null; ns.history=[]; ns.courts=[];
-  ns.members.forEach(function(m){
-    m.totalGames=0; m.consecutiveGames=0; m.lastDate=null;
-    m.status='active'; m.lastWaitStart=Date.now();
-  });
-  if(!inherit) ns.members=[];
+  // Deep copy members only (reset all game stats for complete isolation)
+  var newMembers=[];
+  if(inherit){
+    newMembers=JSON.parse(JSON.stringify(S.members)).map(function(m){
+      return {
+        id:m.id, name:m.name, levelId:m.levelId, groupId:m.groupId,
+        type:m.type, year:m.year, comment:m.comment||'',
+        totalGames:0, consecutiveGames:0, todayGames:0,
+        lastDate:null, lastWaitStart:Date.now(),
+        status:'active', lastGameEndTime:null, lastGameStartTime:null,
+        pin:m.pin||null, createdAt:m.createdAt||Date.now()
+      };
+    });
+  }
+  var ns={
+    version:APP_VERSION,
+    members:newMembers,
+    levels:JSON.parse(JSON.stringify(S.levels)),
+    groups:JSON.parse(JSON.stringify(S.groups)),
+    settings:JSON.parse(JSON.stringify(S.settings)),
+    courts:[], sessions:[], todayParticipants:[], todayDate:null,
+    history:[], nextId:S.nextId, adminIds:JSON.parse(JSON.stringify(S.adminIds||[])),
+    memberSort:S.memberSort, memberYear:CURRENT_YEAR,
+    swapMode:{active:false,source:null}, _ts:0
+  };
   localStorage.setItem(getProjectKey(nid),JSON.stringify(ns));
   document.getElementById('new-proj-name').value='';
   closeAllModals();
@@ -1169,12 +1193,32 @@ function deleteProject(id){
   var p=g.projects.find(function(x){return x.id===id;});
   var pname=p?p.name:'このプロジェクト';
   confirmDialog('プロジェクト削除',
-    '「'+pname+'」のデータをすべて削除しますか？\nメンバー・練習日データが完全に消えます。元に戻せません。',
+    '【削除前にエクスポートをおすすめします】\n\n'
+    +'「'+pname+'」のメンバー・練習日データが完全に消えます。\n'
+    +'データ画面からエクスポートしましたか？\n\n'
+    +'※ 削除はFirebase経由で全端末に即時反映されます。',
     function(){
+      // 1. Remove from localStorage
       localStorage.removeItem(getProjectKey(id));
+      // 2. Remove from global
       g.projects=g.projects.filter(function(x){return x.id!==id;});
-      if(g.currentId===id){ g.currentId=g.projects[0].id; saveGlobal(g); switchProject(g.currentId); }
-      else{ saveGlobal(g); renderProjectList(); }
+      // 3. Write deletion marker to Firebase so ALL devices sync
+      if(fbConnected&&fbDb){
+        var updates={};
+        updates['global']={projects:g.projects, currentId:g.currentId!==id?g.currentId:g.projects[0]?.id, _ts:Date.now()};
+        updates['deletedProjects/'+id]={deletedAt:Date.now()};
+        updates['projects/'+id.replace(/[.$#\[\]]/g,'_')]=null; // delete project data
+        firebase.database(fbApp).ref('/').update(updates);
+      }
+      if(g.currentId===id){
+        g.currentId=g.projects[0]?g.projects[0].id:null;
+        saveGlobal(g);
+        if(g.currentId) switchProject(g.currentId);
+      } else {
+        saveGlobal(g);
+        renderProjectList();
+        renderAll();
+      }
     },'削除','danger');
 }
 function renderProjectList(){
@@ -3297,6 +3341,90 @@ function finishAllCourts(){
   });
   if(n>0){ save(); renderCourts(); renderWaiting(); renderTodayRanking(); toast(n+'コート 試合終了'); }
   else toast('進行中のコートがありません');
+}
+
+function exportMembers(){
+  // Export only member identity info (no game stats)
+  var data={
+    type:'bm_members_v2',
+    exportedAt:new Date().toISOString(),
+    projectName:(getCurrentProject()||{}).name||'',
+    levels:S.levels,
+    groups:S.groups,
+    members:S.members.map(function(m){
+      return {
+        id:m.id, name:m.name, levelId:m.levelId, groupId:m.groupId,
+        type:m.type, year:m.year, comment:m.comment||'',
+        createdAt:m.createdAt||Date.now()
+      };
+    })
+  };
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='bm_members_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('メンバー情報をエクスポートしました');
+}
+function importMembers(){
+  confirmDialog(
+    'メンバー情報読込み',
+    '【注意】インポートすると現在のメンバー情報が上書きされます。\n\n'
+    +'・試合数・成績はリセット（0）になります\n'
+    +'・現在のデータは失われます\n\n'
+    +'実行前に「📤 全データ書出し」でバックアップをおすすめします。\n\n'
+    +'このまま続けますか？',
+    function(){
+      var input=document.createElement('input');
+      input.type='file'; input.accept='.json';
+      input.onchange=function(e){
+        var file=e.target.files[0]; if(!file) return;
+        var reader=new FileReader();
+        reader.onload=function(ev){
+          try{
+            var d=JSON.parse(ev.target.result);
+            if(d.type!=='bm_members_v2'){ toast('メンバーファイルではありません'); return; }
+            // Apply levels and groups if present
+            if(d.levels&&d.levels.length) S.levels=d.levels;
+            if(d.groups&&d.groups.length) S.groups=d.groups;
+            // Apply members with reset stats
+            S.members=d.members.map(function(m){
+              return {
+                id:m.id, name:m.name, levelId:m.levelId, groupId:m.groupId,
+                type:m.type||'regular', year:m.year||CURRENT_YEAR,
+                comment:m.comment||'', createdAt:m.createdAt||Date.now(),
+                totalGames:0, consecutiveGames:0, todayGames:0,
+                lastDate:null, lastWaitStart:Date.now(),
+                status:'active', lastGameEndTime:null, lastGameStartTime:null
+              };
+            });
+            S.nextId=Math.max.apply(null,S.members.map(function(m){return m.id;}).concat([0]))+1;
+            save(); renderAll();
+            toast(S.members.length+'人のメンバーを読み込みました（成績はリセット）');
+          }catch(ex){ toast('ファイル読込みエラー: '+ex.message); }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }, '続ける', 'warn'
+  );
+}
+
+/* ============================================================
+   BOOT
+============================================================ */
+init();
+;
+            S.nextId=Math.max.apply(null,S.members.map(function(m){return m.id;}).concat([0]))+1;
+            save(); renderAll();
+            toast(S.members.length+'人のメンバーを読み込みました（成績はリセット）');
+          }catch(ex){ toast('ファイル読込みエラー: '+ex.message); }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }, '続ける', 'warn'
+  );
 }
 
 /* ============================================================
