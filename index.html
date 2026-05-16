@@ -830,6 +830,7 @@ textarea.field{resize:vertical;min-height:60px}
   </div>
 </div>
 </
+<script>
 /* ============================================================
    STATE SCHEMA
 ============================================================ */
@@ -3375,19 +3376,17 @@ function importMembers(){
     +'実行前に「📤 全データ書出し」でバックアップをおすすめします。\n\n'
     +'このまま続けますか？',
     function(){
-      var input=document.createElement('input');
-      input.type='file'; input.accept='.json';
-      input.onchange=function(e){
+      var inp=document.createElement('input');
+      inp.type='file'; inp.accept='.json';
+      inp.onchange=function(e){
         var file=e.target.files[0]; if(!file) return;
         var reader=new FileReader();
         reader.onload=function(ev){
           try{
             var d=JSON.parse(ev.target.result);
             if(d.type!=='bm_members_v2'){ toast('メンバーファイルではありません'); return; }
-            // Apply levels and groups if present
             if(d.levels&&d.levels.length) S.levels=d.levels;
             if(d.groups&&d.groups.length) S.groups=d.groups;
-            // Apply members with reset stats
             S.members=d.members.map(function(m){
               return {
                 id:m.id, name:m.name, levelId:m.levelId, groupId:m.groupId,
@@ -3405,24 +3404,7 @@ function importMembers(){
         };
         reader.readAsText(file);
       };
-      input.click();
-    }, '続ける', 'warn'
-  );
-}
-
-/* ============================================================
-   BOOT
-============================================================ */
-init();
-;
-            S.nextId=Math.max.apply(null,S.members.map(function(m){return m.id;}).concat([0]))+1;
-            save(); renderAll();
-            toast(S.members.length+'人のメンバーを読み込みました（成績はリセット）');
-          }catch(ex){ toast('ファイル読込みエラー: '+ex.message); }
-        };
-        reader.readAsText(file);
-      };
-      input.click();
+      inp.click();
     }, '続ける', 'warn'
   );
 }
@@ -3433,4 +3415,6 @@ init();
 init();
 </script>
 </body>
-</html>
+</html><div class="toast" id="toast"></div>
+
+
