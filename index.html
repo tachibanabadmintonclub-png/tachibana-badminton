@@ -903,6 +903,7 @@ const FB_PATH = 'projects/';
 
 var fbApp=null, fbDb=null, fbRef=null, fbConnected=false;
 var fbSyncTimer=null, fbLastPush=0;
+var fbGlobalTs=0; // last received Firebase global _ts
 
 function fbInit(){
   try{
@@ -958,10 +959,7 @@ function fbApplyProjectData(d){
   if(!d)return;
   d=fbNormalizeData(d);
   var inTs=d._ts||0;
-  if(inTs>0 && inTs===fbLastPush) return; // our own echo
-  // Reject if Firebase data is older than our local state
-  // Use 2000ms tolerance to allow for clock skew
-  if(inTs>0 && inTs<((S._ts||0)-2000)) return; // genuinely older data
+  if(inTs>0 && inTs===fbLastPush) return; // our own echo (don't loop)
   var syncFields=['members','courts','sessions','todayParticipants','todayDate',
                   'adminIds','levels','groups','settings','nextId'];
   syncFields.forEach(function(k){ if(d[k]!==undefined) S[k]=d[k]; });
@@ -991,6 +989,7 @@ function fbApplyGlobal(d){
     if(inTs>0 && inTs<=(g._ts||0)) return;
     g.projects=d.projects;
     g._ts=inTs;
+    fbGlobalTs=inTs; // track last received global timestamp
     // If current project was deleted, switch to first available
     if(!g.projects.find(function(p){return p.id===g.currentId;})){
       g.currentId=d.currentId||g.projects[0]?.id;
@@ -1041,9 +1040,13 @@ function fbPush(){
         adminIds:S.adminIds, levels:S.levels, groups:S.groups,
         settings:S.settings, nextId:S.nextId, _ts:ts
       };
-      // 2. Push global project list
+      // 2. Push global project list ONLY if we have the latest version
+      // (prevents older clients from overwriting newer global state)
       var g=loadGlobal();
-      if(g) updates['global']={projects:g.projects, currentId:g.currentId, _ts:ts};
+      var localGts=g?g._ts||0:0;
+      if(g && (localGts>=fbGlobalTs || fbGlobalTs===0)){
+        updates['global']={projects:g.projects, currentId:g.currentId, _ts:ts};
+      }
       db.ref('/').update(updates)
         .then(function(){ fbSetStatus('online','同期: '+fbAgo(ts)); })
         .catch(function(e){ console.warn('FB push:',e); fbSetStatus('offline','書込エラー'); });
@@ -1070,7 +1073,7 @@ function loadGlobal(){
   }catch(e){ return null; }
 }
 function saveGlobal(g){
-  if(!g._ts) g._ts=Date.now();
+  g._ts=Date.now(); // always update _ts so we know when we last touched it
   try{ localStorage.setItem(GLOBAL_KEY,JSON.stringify(g)); }catch(e){}
 }
 function getProjectKey(id){ return 'bm_proj_'+String(id); }
@@ -1195,7 +1198,7 @@ function createNewProject(){
   // Push new (empty) project to Firebase IMMEDIATELY (bypass debounce)
   clearTimeout(fbSyncTimer);
   if(fbConnected && fbDb){
-    var newTs = Date.now(); fbLastPush = newTs;
+    var newTs = Date.now(); fbLastPush = newTs; fbGlobalTs = newTs;
     var newPath = fbGetPath();
     var newPayload = {
       members: S.members, courts: [], sessions: [], adminIds: S.adminIds||[],
@@ -1249,9 +1252,11 @@ function deleteProject(id){
       g.projects=g.projects.filter(function(x){return x.id!==id;});
       // 3. Write deletion marker to Firebase so ALL devices sync
       if(fbConnected&&fbDb){
+        var delTs=Date.now();
+        fbGlobalTs=delTs; // update local tracking so we don't re-push old global
         var updates={};
-        updates['global']={projects:g.projects, currentId:g.currentId!==id?g.currentId:g.projects[0]?.id, _ts:Date.now()};
-        updates['deletedProjects/'+id]={deletedAt:Date.now()};
+        updates['global']={projects:g.projects, currentId:g.currentId!==id?g.currentId:(g.projects[0]?g.projects[0].id:null), _ts:delTs};
+        updates['deletedProjects/'+id]={deletedAt:delTs};
         updates['projects/'+id.replace(/[.$#\[\]]/g,'_')]=null; // delete project data
         firebase.database(fbApp).ref('/').update(updates);
       }
