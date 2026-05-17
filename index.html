@@ -959,7 +959,9 @@ function fbApplyProjectData(d){
   d=fbNormalizeData(d);
   var inTs=d._ts||0;
   if(inTs>0 && inTs===fbLastPush) return; // our own echo
-  if(inTs>0 && inTs<((S._ts||0)-500)) return; // genuinely older
+  // Reject if Firebase data is older than our local state
+  // Use 2000ms tolerance to allow for clock skew
+  if(inTs>0 && inTs<((S._ts||0)-2000)) return; // genuinely older data
   var syncFields=['members','courts','sessions','todayParticipants','todayDate',
                   'adminIds','levels','groups','settings','nextId'];
   syncFields.forEach(function(k){ if(d[k]!==undefined) S[k]=d[k]; });
@@ -1099,12 +1101,20 @@ function initProjects(){
 function switchProjectAndClose(id){ closeModal('modal-project'); switchProject(id); }
 function switchProject(id){
   var g=loadGlobal(); if(!g) return;
-  save();
-  g.currentId=id; saveGlobal(g);
+  save(); // save current project first
+  g.currentId=id; g._ts=Date.now(); saveGlobal(g);
   var pd=localStorage.getItem(getProjectKey(id));
   try{
-    if(pd){ JSON.parse(pd); localStorage.setItem(STORAGE_KEY,pd); } // validate before setting
-    else localStorage.removeItem(STORAGE_KEY);
+    if(pd){
+      var parsed=JSON.parse(pd);
+      // Update _ts to "now" so incoming Firebase data (which may be old) doesn't overwrite
+      parsed._ts=Date.now();
+      var pdStr=JSON.stringify(parsed);
+      localStorage.setItem(STORAGE_KEY,pdStr);
+      localStorage.setItem(getProjectKey(id),pdStr);
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   }catch(e){
     localStorage.removeItem(STORAGE_KEY);
     toast('プロジェクトデータが壊れています。新規状態で開始します。');
@@ -1176,12 +1186,26 @@ function createNewProject(){
   closeAllModals();
   g.currentId=nid; saveGlobal(g);
   ns._ts = Date.now(); // mark timestamp to prevent old Firebase data overwriting
+  S._ts = ns._ts; // also update active state timestamp
   localStorage.setItem(getProjectKey(nid), JSON.stringify(ns)); // save again with _ts
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(ns)); // also update active slot
   Object.assign(S, ns); syncCourts();
-  // Firebase: switch listener to new project path
+  // Firebase: switch listener to new project path BEFORE pushing
   fbResubscribe();
-  // Push new (empty) project to Firebase
-  fbPush();
+  // Push new (empty) project to Firebase IMMEDIATELY (bypass debounce)
+  clearTimeout(fbSyncTimer);
+  if(fbConnected && fbDb){
+    var newTs = Date.now(); fbLastPush = newTs;
+    var newPath = fbGetPath();
+    var newPayload = {
+      members: S.members, courts: [], sessions: [], adminIds: S.adminIds||[],
+      levels: S.levels, groups: S.groups, settings: S.settings,
+      todayParticipants: [], todayDate: null, nextId: S.nextId, _ts: newTs
+    };
+    firebase.database(fbApp).ref(newPath).set(newPayload)
+      .then(function(){ fbSetStatus('online','新プロジェクト同期完了'); })
+      .catch(function(e){ console.warn('New project push failed:', e); });
+  }
   // タブをコートに戻してレンダリング
   currentTab='court';
   ['court','today','member','history','data'].forEach(function(t){
