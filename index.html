@@ -982,10 +982,23 @@ function fbApplyProjectData(d){
 function fbApplyGlobal(d){
   if(!d||!d.projects||!Array.isArray(d.projects)) return;
   var inTs=d._ts||0;
-  if(inTs>0 && inTs===fbLastPush) return; // 自分のエコー除外
+  // 自分のエコー除外
+  if(inTs>0 && inTs===fbLastPush) return;
+  // 既に受信済みの新しいglobalより古いデータは無視
+  // fbGlobalTs は自分が書き込んだ時刻も含む最高値
+  if(inTs>0 && inTs<fbGlobalTs) {
+    console.log('[FB] global rejected (old): inTs='+inTs+' < fbGlobalTs='+fbGlobalTs);
+    return;
+  }
   var g=loadGlobal()||{projects:[],currentId:null};
   var localCurrent=g.currentId;
-  g.projects=d.projects; g._ts=inTs; fbGlobalTs=inTs;
+  // プロジェクト数が減っている場合は慎重に扱う（削除操作かどうか確認）
+  if(d.projects.length < g.projects.length && inTs <= fbGlobalTs){
+    console.log('[FB] global rejected (fewer projects without newer ts)');
+    return;
+  }
+  fbGlobalTs=inTs; // 更新
+  g.projects=d.projects; g._ts=inTs;
   if(!g.projects.find(function(p){return p.id===localCurrent;})){
     g.currentId=d.currentId||(g.projects[0]?g.projects[0].id:null);
     saveGlobal(g);
@@ -993,7 +1006,7 @@ function fbApplyGlobal(d){
   } else {
     saveGlobal(g); updateCurrentProjectBadge(); updateHeaderProjectNav();
   }
-  console.log('[FB] global synced, projects='+d.projects.length);
+  console.log('[FB] global applied, projects='+d.projects.length+' ts='+inTs);
 }
 
 function fbSubscribe(){
@@ -1202,8 +1215,7 @@ function createNewProject(){
     document.getElementById('tab-'+t).classList.toggle('active',t==='court');
   });
   renderAll();
-  // Reset fbLastPush after delay so future Firebase updates are not blocked
-  setTimeout(function(){ fbLastPush=0; }, 3000);
+  // fbLastPush is for project data echo, not global - no need to reset
   toast('新しいプロジェクト「'+name+'」を開始しました');
 }
 function renameProject(id){
