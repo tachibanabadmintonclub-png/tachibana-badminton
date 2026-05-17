@@ -1177,20 +1177,23 @@ function createNewProject(){
   Object.assign(S, ns); syncCourts();
   // Firebase: switch listener to new project path BEFORE pushing
   fbResubscribe();
-  // globalも含めて即時プッシュ
+  // globalも含めて即時プッシュ（管理者チェックをバイパスして直接送信）
   clearTimeout(fbSyncTimer);
-  fbPush(true); // includeGlobal=true
-  if(false && fbConnected && fbDb){
-    var newTs = Date.now(); fbLastPush = newTs; fbGlobalTs = newTs;
-    var newPath = fbGetPath();
-    var newPayload = {
-      members: S.members, courts: [], sessions: [], adminIds: S.adminIds||[],
-      levels: S.levels, groups: S.groups, settings: S.settings,
-      todayParticipants: [], todayDate: null, nextId: S.nextId, _ts: newTs
+  if(fbConnected && fbDb){
+    var newTs=Date.now(); fbLastPush=newTs; fbGlobalTs=newTs;
+    var g2=loadGlobal();
+    var updates={};
+    updates[fbGetPath()]={
+      members:S.members, courts:[], sessions:[], adminIds:S.adminIds||[],
+      levels:S.levels, groups:S.groups, settings:S.settings,
+      todayParticipants:[], todayDate:null, nextId:S.nextId, _ts:newTs
     };
-    firebase.database(fbApp).ref(newPath).set(newPayload)
+    if(g2) updates['global']={projects:g2.projects, currentId:g2.currentId, _ts:newTs};
+    firebase.database(fbApp).ref('/').update(updates)
       .then(function(){ fbSetStatus('online','新プロジェクト同期完了'); })
-      .catch(function(e){ console.warn('New project push failed:', e); });
+      .catch(function(e){ console.warn('New project push failed:',e); fbSetStatus('offline','書込エラー'); });
+  } else {
+    fbPush(true); // Firebase未接続時は通常のキュー経由
   }
   // タブをコートに戻してレンダリング
   currentTab='court';
@@ -1199,6 +1202,8 @@ function createNewProject(){
     document.getElementById('tab-'+t).classList.toggle('active',t==='court');
   });
   renderAll();
+  // Reset fbLastPush after delay so future Firebase updates are not blocked
+  setTimeout(function(){ fbLastPush=0; }, 3000);
   toast('新しいプロジェクト「'+name+'」を開始しました');
 }
 function renameProject(id){
