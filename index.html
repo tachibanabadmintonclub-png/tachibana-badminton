@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BadmintonDraw">
 <meta name="theme-color" content="#070c18">
-<title>BadmintonDraw v2</title>
+<title>Tachibana Badminton v0.0.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -361,7 +361,7 @@ textarea.field{resize:vertical;min-height:60px}
 <!-- HEADER -->
 <div class="header">
   <div style="flex:1;min-width:0">
-    <div class="hdr-logo">Tachibana <span style="color:var(--text2);font-size:14px;font-weight:500">BADMINTON</span><span style="color:var(--text3);font-size:11px;font-weight:400;margin-left:4px">v2</span></div>
+    <div class="hdr-logo">Tachibana <span style="color:var(--text2);font-size:14px;font-weight:500">BADMINTON</span><span style="color:var(--text3);font-size:11px;font-weight:400;margin-left:4px">v0.0.1</span></div>
     <div class="hdr-date" id="hdr-date"></div>
     <div class="fb-status" id="fb-status" title="Firebase接続状態"><span class="fb-dot offline" id="fb-dot"></span><span id="fb-status-text">オフライン</span></div>
   </div>
@@ -392,6 +392,10 @@ textarea.field{resize:vertical;min-height:60px}
   <div class="draw-hd">
     <button class="draw-btn" id="draw-all-btn" onclick="drawAll()">👑🏸 抽選する</button>
     <button class="undo-btn" onclick="undoLast()" title="元に戻す">↩</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <div id="draw-officer-badge" style="display:none"></div>
+    <button class="btn ghost xs" onclick="openDrawOfficerModal()" style="font-size:11px">🎯 抽選担当</button>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
     <button class="btn primary full" id="all-start-btn" onclick="confirmAllCourts()" style="font-size:13px;padding:10px">✅ 全試合開始</button>
@@ -600,7 +604,7 @@ textarea.field{resize:vertical;min-height:60px}
   <div class="set-row" style="flex-direction:column;align-items:flex-start;gap:8px">
     <div><div class="set-row-lbl">現在のコード</div><div id="club-code-disp" style="font-size:12px;color:var(--orange);margin-top:2px">未設定</div></div>
     <div style="display:flex;gap:7px;width:100%">
-      <input class="field sm" id="new-club-code" placeholder="例: tachi2026" maxlength="20" style="flex:1">
+      <input class="field sm" id="new-club-code" placeholder="例: tachibana2026xyz" maxlength="20" style="flex:1">
       <button class="btn primary sm" onclick="setClubCode()">設定</button>
       <button class="btn danger sm" onclick="clearClubCode()">解除</button>
     </div>
@@ -831,6 +835,18 @@ textarea.field{resize:vertical;min-height:60px}
 </div>
 </div>
 
+<!-- DRAW OFFICER MODAL -->
+<div class="modal-bd" id="modal-draw-officer" onclick="closeBgModal(event,'modal-draw-officer')">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-title">🎯 抽選担当設定</div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6">抽選担当者のみコート画面の操作ができます。誰でも変更できます。管理者は常に操作可能。</div>
+  <div id="draw-officer-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+  <button class="btn warn full" onclick="setDrawOfficer(null);closeModal('modal-draw-officer')">🔓 担当を解除（誰でも操作可能）</button>
+  <div style="margin-top:6px"><button class="btn ghost full" onclick="closeModal('modal-draw-officer')">閉じる</button></div>
+</div>
+</div>
+
 <!-- CONFIRM DIALOG -->
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box">
@@ -850,7 +866,7 @@ textarea.field{resize:vertical;min-height:60px}
    STATE SCHEMA
 ============================================================ */
 const CURRENT_YEAR = new Date().getFullYear();
-const APP_VERSION = '2.0';
+const APP_VERSION = '0.0.1';
 
 let S = {
   version: APP_VERSION,
@@ -869,8 +885,8 @@ let S = {
   sessions: [],     // {id,date,participants:[id],results:[{memberId,games}],totalGames}
   // Settings
   settings: {
-    courtCount: 2,
-    levelMatch: false,
+    courtCount: 3,
+    levelMatch: true,
     consecLimit: false,
     consecMax: 2,
     waitPriority: true,
@@ -886,6 +902,7 @@ let S = {
   },
   // Admin
   adminIds: [],      // member ids with admin rights
+  drawOfficerId: null, // 抽選担当メンバーID
   // View state
   memberSort: 'group',
   memberYear: CURRENT_YEAR,
@@ -976,6 +993,7 @@ function fbApplyProjectData(d){
   if(currentTab==='today'){ renderToday(); renderTodayRanking(); }
   if(currentTab==='member') renderMembers();
   updateCurrentProjectBadge();
+  renderDrawOfficerBadge();
   fbSetStatus('online','同期: '+fbAgo(inTs));
   console.log('[FB] project synced ts='+inTs);
 }
@@ -1331,9 +1349,9 @@ function load(){
 
 function defaultLevels(){
   return [
-    {id:1, name:'強：ガンガンいこうぜ', shortName:'強', color:'#ff1744', order:0},
+    {id:1, name:'強：ガンガンいこうぜ', shortName:'強', color:'#ff1744', order:2},
     {id:2, name:'普：みんながんばれ',   shortName:'普', color:'#00d4ff', order:1},
-    {id:3, name:'緩：いのちだいじに',   shortName:'緩', color:'#00e676', order:2}
+    {id:3, name:'緩：いのちだいじに',   shortName:'緩', color:'#00e676', order:0}
   ];
 }
 function defaultGroups(){
@@ -1989,6 +2007,11 @@ function syncCourts(){
   const n=S.settings.courtCount;
   while(S.courts.length<n) S.courts.push({id:S.courts.length+1,players:null,confirmed:false});
   if(S.courts.length>n) S.courts=S.courts.slice(0,n);
+  // デフォルトコートレベル設定
+  if(!S.settings.courtLevels) S.settings.courtLevels={};
+  [[1,'1'],[2,'2'],[3,'3']].forEach(function(p){
+    if(!S.settings.courtLevels[p[0]]) S.settings.courtLevels[p[0]]=p[1];
+  });
 }
 function getLevelConsec(levelId){
   var lc=S.settings.levelConsec||{};
@@ -2116,7 +2139,7 @@ function drawForCourt(courtId){
   return 'ok';
 }
 function drawAll(){
-  if(!requireAdmin()) return;
+  if(!requireDrawOfficer()) return;
   
   if(!S.todayParticipants.length && !S.todayDate){
     toast('「本日」タブで参加メンバーを選択してセッションを開始してください');
@@ -2142,6 +2165,7 @@ function drawAll(){
   save(); renderCourts(); renderWaiting();
 }
 function reshuffleCourt(courtId){
+  if(!requireDrawOfficer()) return;
   pushHistory();
   var c=S.courts.find(function(x){return x.id===courtId;});
   if(c&&c.confirmed) revertCourtConfirm(c);
@@ -2163,6 +2187,7 @@ function revertCourtConfirm(c){
   c.confirmed=false;
 }
 function confirmCourt(courtId){
+  if(!requireDrawOfficer()) return;
   const c=S.courts.find(x=>x.id===courtId); if(!c||!c.players) return;
   if(c.confirmed) return; // already confirmed
   c.confirmed=true;
@@ -2972,6 +2997,7 @@ function openModal(id){
   if(id==='modal-groups') renderGroupsModal();
   if(id==='modal-levels') renderLevelsModal();
   if(id==='modal-project') renderProjectList();
+  if(id==='modal-draw-officer') openDrawOfficerModal();
   if(id==='modal-admin'){ openAdminModal(); }
   if(id==='modal-identity'){ renderIdentityChips(); }
 }
@@ -3391,7 +3417,7 @@ function updateClubCodeDisplay(){
 }
 
 function confirmAllCourts(){
-  if(!requireAdmin()) return;
+  if(!requireDrawOfficer()) return;
   pushHistory();
   var n=0, now=Date.now();
   S.courts.forEach(function(c){
@@ -3410,7 +3436,7 @@ function confirmAllCourts(){
   else toast('開始できるコートがありません');
 }
 function finishAllCourts(){
-  if(!requireAdmin()) return;
+  if(!requireDrawOfficer()) return;
   pushHistory();
   var n=0, now=Date.now();
   S.courts.forEach(function(c){
@@ -3492,6 +3518,45 @@ function importMembers(){
       inp.click();
     }, '続ける', 'warn'
   );
+}
+
+/* ═══ DRAW OFFICER（抽選担当） ═══ */
+function isDrawOfficer(){
+  if(!S.drawOfficerId) return true;
+  if(isAdmin()) return true;
+  var lid=getLocalMemberId();
+  return lid && parseInt(lid)===S.drawOfficerId;
+}
+function requireDrawOfficer(){
+  if(!isDrawOfficer()){ toast('抽選担当または管理者のみ操作できます'); return false; }
+  return true;
+}
+function setDrawOfficer(memberId){
+  S.drawOfficerId=memberId?parseInt(memberId):null;
+  save(); renderAll();
+  var m=memberId?S.members.find(function(x){return x.id===parseInt(memberId);}):null;
+  toast('抽選担当: '+(m?m.name:'解除（誰でも操作可）'));
+}
+function renderDrawOfficerBadge(){
+  var el=document.getElementById('draw-officer-badge'); if(!el) return;
+  if(!S.drawOfficerId){ el.style.display='none'; return; }
+  var m=S.members.find(function(x){return x.id===S.drawOfficerId;});
+  el.style.cssText='display:flex;align-items:center;gap:5px;background:var(--accent-a);border:1px solid var(--accent);border-radius:100px;padding:3px 10px;font-size:11px;color:var(--accent);font-weight:600';
+  el.textContent='🎯 担当: '+(m?m.name:'不明');
+}
+function openDrawOfficerModal(){
+  var current=S.drawOfficerId;
+  document.getElementById('draw-officer-list').innerHTML=S.members.map(function(m){
+    var lvl=getLevelById(m.levelId);
+    var isCur=(m.id===current);
+    var sid=m.id;
+    var style=isCur?'border-color:var(--accent);background:var(--accent-a);color:var(--accent)':'';
+    return '<span class="part-chip '+(isCur?'on':'')+'" onclick="setDrawOfficer('+sid+');closeModal(\'modal-draw-officer\')" style="'+style+'">'
+      +'<span style="width:18px;height:18px;border-radius:50%;background:'+lvl.color+'22;color:'+lvl.color+';display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700">'+getInitial(m.name)+'</span>'
+      +escH(m.name)+(isCur?' ✓':'')
+      +'</span>';
+  }).join('');
+  openModal('modal-draw-officer');
 }
 
 /* ============================================================
