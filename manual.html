@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tachibana Badminton v0.0.1 - 使い方ガイド</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #070c18; --bg2: #0d1528; --bg3: #111d35; --bg4: #162040;
+  --accent: #00d4ff; --accent2: #7c3aed; --green: #00e676; --red: #ff1744; --yellow: #ffd600;
+  --text: #e8eaf6; --text2: #9ba3c0; --text3: #5a6480;
+  --border: rgba(255,255,255,.08); --r: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 14px; line-height: 1.7; }
+/* Layout */
+.sidebar { position: fixed; top: 0; left: 0; width: 240px; height: 100vh; background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; padding: 20px 0; z-index: 100; }
+.main { margin-left: 240px; padding: 40px; max-width: 860px; }
+@media(max-width:768px){ .sidebar{display:none} .main{margin-left:0;padding:20px} }
+/* Sidebar */
+.sidebar-logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.sidebar-logo .title { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent); }
+.sidebar-logo .ver { font-size: 11px; color: var(--text3); }
+.nav-section { padding: 6px 20px; font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-top: 8px; }
+.nav-item { display: block; padding: 8px 20px 8px 32px; font-size: 13px; color: var(--text2); text-decoration: none; border-left: 2px solid transparent; transition: all .2s; }
+.nav-item:hover, .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(0,212,255,.05); }
+/* Sections */
+section { margin-bottom: 60px; scroll-margin-top: 40px; }
+h1 { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+h2 { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+h3 { font-size: 15px; font-weight: 700; color: var(--accent); margin: 20px 0 8px; }
+p { color: var(--text2); margin-bottom: 10px; }
+/* Cards */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 18px 20px; margin-bottom: 14px; }
+.card.accent { border-left: 3px solid var(--accent); }
+.card.green { border-left: 3px solid var(--green); }
+.card.yellow { border-left: 3px solid var(--yellow); }
+.card.red { border-left: 3px solid var(--red); }
+.card-title { font-weight: 700; color: var(--text); margin-bottom: 6px; font-size: 14px; }
+/* Steps */
+.steps { counter-reset: step; }
+.step { display: flex; gap: 16px; margin-bottom: 14px; align-items: flex-start; }
+.step-num { counter-increment: step; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; margin-top: 2px; }
+.step-body { flex: 1; }
+.step-title { font-weight: 700; color: var(--text); margin-bottom: 3px; }
+.step-desc { color: var(--text2); font-size: 13px; }
+/* Tags */
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 4px; }
+.tag.admin { background: rgba(255,214,0,.15); color: var(--yellow); border: 1px solid rgba(255,214,0,.3); }
+.tag.anyone { background: rgba(0,230,118,.15); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
+.tag.officer { background: rgba(0,212,255,.15); color: var(--accent); border: 1px solid rgba(0,212,255,.3); }
+/* Screen mockups */
+.mockup { background: #0a0f1e; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; margin: 16px 0; }
+.mockup-bar { background: var(--bg3); padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+.mockup-bar .logo { font-family: 'Rajdhani', sans-serif; font-size: 14px; font-weight: 700; color: var(--accent); }
+.mockup-bar .ver { font-size: 10px; color: var(--text3); }
+.mockup-tabs { display: flex; background: var(--bg3); border-bottom: 1px solid var(--border); }
+.mockup-tab { padding: 8px 16px; font-size: 12px; color: var(--text3); border-bottom: 2px solid transparent; cursor: default; }
+.mockup-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(0,212,255,.05); }
+.mockup-body { padding: 16px; }
+.m-btn { display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; margin: 3px; cursor: default; }
+.m-btn.primary { background: linear-gradient(135deg, #0af, #007fa3); color: #000; }
+.m-btn.ghost { background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--text2); }
+.m-btn.warn { background: rgba(255,214,0,.15); border: 1px solid rgba(255,214,0,.3); color: var(--yellow); }
+.m-btn.danger { background: rgba(255,23,68,.15); border: 1px solid rgba(255,23,68,.3); color: var(--red); }
+.m-court { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+.m-court-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.m-court-num { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; color: var(--accent); width: 28px; }
+.m-court-lvl { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+.m-player { display: inline-flex; align-items: center; gap: 6px; background: var(--bg4); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; margin: 3px; font-size: 12px; }
+.m-avatar { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+.m-wait { background: var(--bg3); border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.m-bar-bg { flex: 1; height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+.m-bar { height: 100%; border-radius: 2px; }
+/* Table */
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+th { background: var(--bg3); color: var(--text2); padding: 8px 12px; text-align: left; font-weight: 600; border: 1px solid var(--border); }
+td { padding: 8px 12px; border: 1px solid var(--border); color: var(--text2); vertical-align: top; }
+tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+/* Tip box */
+.tip { background: rgba(0,212,255,.07); border: 1px solid rgba(0,212,255,.2); border-radius: 8px; padding: 12px 14px; margin: 12px 0; font-size: 13px; color: var(--text2); }
+.tip::before { content: '💡 '; }
+.warn-box { background: rgba(255,214,0,.07); border: 1px solid rgba(255,214,0,.2); border-radius: 8px; padding: 12px 14px; margin: 12px 0; font-size: 13px; color: var(--text2); }
+.warn-box::before { content: '⚠️ '; }
+/* Divider */
+.div { height: 1px; background: var(--border); margin: 30px 0; }
+/* Flow */
+.flow { display: flex; flex-wrap: wrap; gap: 0; align-items: center; margin: 12px 0; }
+.flow-item { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 12px; font-weight: 600; color: var(--text); }
+.flow-arrow { color: var(--text3); padding: 0 8px; font-size: 18px; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="title">Tachibana BADMINTON</div>
+    <div class="ver">v0.0.1 使い方ガイド</div>
+  </div>
+  <div class="nav-section">はじめに</div>
+  <a href="#quickstart" class="nav-item">▶ クイックスタート</a>
+  <a href="#roles" class="nav-item">👤 役割と権限</a>
+  <div class="nav-section">メンバー向け</div>
+  <a href="#join" class="nav-item">📱 参加方法</a>
+  <a href="#status" class="nav-item">😴 状態ボタン</a>
+  <div class="nav-section">管理者向け</div>
+  <a href="#admin-setup" class="nav-item">👑 初期設定</a>
+  <a href="#draw" class="nav-item">🏸 抽選の流れ</a>
+  <div class="nav-section">各ページ説明</div>
+  <a href="#page-court" class="nav-item">🏸 コートページ</a>
+  <a href="#page-today" class="nav-item">📋 本日ページ</a>
+  <a href="#page-member" class="nav-item">👥 メンバーページ</a>
+  <a href="#page-stats" class="nav-item">📊 成績ページ</a>
+  <a href="#page-data" class="nav-item">💾 データページ</a>
+  <div class="nav-section">設定・管理</div>
+  <a href="#settings" class="nav-item">⚙️ 設定</a>
+  <a href="#project" class="nav-item">📁 プロジェクト（年度）</a>
+  <a href="#security" class="nav-item">🔐 セキュリティ</a>
+  <a href="#share" class="nav-item">🔗 共有方法</a>
+</nav>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- ══════════ QUICK START ══════════ -->
+<section id="quickstart">
+<h1>🏸 Tachibana Badminton</h1>
+<p style="font-size:16px;color:var(--text);margin-bottom:20px">バドミントンサークル向け抽選・成績管理アプリの使い方ガイドです。</p>
+
+<h2>▶ クイックスタート（初回セットアップ）</h2>
+<p>初めて使い始める管理者向けの手順です。</p>
+
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">URLにアクセス</div><div class="step-desc">管理者からLINEで送られたURLをブラウザで開きます。iPhoneはSafari推奨。</div></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">入室コードを入力</div><div class="step-desc">管理者から共有された入室コードを入力します。一度入力すればこの端末では次回から不要です。</div></div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">自分を設定（マイプロフィール）</div><div class="step-desc">ヘッダーの 👤 ボタンをタップ → メンバー一覧から自分を選んでタップ → 確認して設定。</div></div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body"><div class="step-title">ホーム画面に追加（推奨）</div><div class="step-desc">Safariの「共有」→「ホーム画面に追加」でアプリのように使えます。</div></div></div>
+</div>
+
+<div class="tip">入室コードを初めて入力した後は、次回から自動でログインされます。端末を変えたときは再度コードが必要です。</div>
+</section>
+
+<!-- ══════════ ROLES ══════════ -->
+<section id="roles">
+<h2>👤 役割と権限</h2>
+<p>このアプリには3種類の役割があります。</p>
+
+<table>
+<tr><th>役割</th><th>できること</th><th>設定方法</th></tr>
+<tr><td><span class="tag admin">管理者</span></td><td>全操作（メンバー管理・設定・データ管理・抽選など）</td><td>👑運営管理から設定</td></tr>
+<tr><td><span class="tag officer">抽選担当</span></td><td>コート画面の操作（抽選・試合開始・終了）＋自分の状態変更</td><td>🎯抽選担当ボタンから誰でも設定可</td></tr>
+<tr><td><span class="tag anyone">一般</span></td><td>閲覧・自分の休憩/限界ボタンのみ</td><td>デフォルト</td></tr>
+</table>
+
+<div class="tip">管理者が0人の場合は全員が管理者権限を持ちます（初期状態）。最初に管理者を設定することをおすすめします。</div>
+</section>
+
+<!-- ══════════ JOIN ══════════ -->
+<section id="join">
+<h2>📱 参加方法（メンバー向け）</h2>
+
+<h3>① 入室コードを入力する</h3>
+<p>URLを開くと入室コード画面が表示されます。管理者からLINEで共有されたコードを入力して「入室する」をタップ。</p>
+
+<div class="mockup">
+  <div class="mockup-body" style="text-align:center;padding:30px 20px">
+    <div style="font-size:36px;margin-bottom:10px">🏸</div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent)">Tachibana Badminton</div>
+    <div style="font-size:11px;color:var(--text3);margin:8px 0 18px">入室コードを入力してください</div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;color:var(--text3);font-size:14px;max-width:240px;margin:0 auto 10px">コードを入力...</div>
+    <div class="m-btn primary" style="margin-top:8px;display:inline-flex">入室する</div>
+  </div>
+</div>
+
+<h3>② マイプロフィールを設定する</h3>
+<p>ヘッダーの 👤 ボタンから自分のメンバー情報を登録します。</p>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">👤ボタンをタップ</div><div class="step-desc">ヘッダー右上のオレンジ色の 👤 ボタン。未設定時はオレンジ色に光っています。</div></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">自分の名前を選ぶ</div><div class="step-desc">メンバー一覧が表示されます。自分の名前をタップ。</div></div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">確認して設定</div><div class="step-desc">確認ダイアログが出るので「設定する」をタップ。</div></div></div>
+</div>
+
+<div class="card yellow">
+  <div class="card-title">🔑 PINコードで保護（オプション）</div>
+  自分設定後に「🔑 PINを設定」ボタンが表示されます。4桁のPINを設定すると、他の端末で自分を名乗られる心配がなくなります。
+</div>
+
+<h3>③ リストにいない場合</h3>
+<p>「＋ メンバーとして参加登録」ボタンから新規メンバーとして登録できます（管理者承認が必要な場合あり）。</p>
+</section>
+
+<!-- ══════════ STATUS ══════════ -->
+<section id="status">
+<h2>😴 自分の状態を変える</h2>
+<p>コートページの待機エリアにある自分のカードから状態を変更できます。<span class="tag anyone">誰でも操作可</span></p>
+
+<table>
+<tr><th>ボタン</th><th>状態</th><th>意味</th></tr>
+<tr><td>😴 休憩</td><td>休憩中</td><td>今日はしばらく休む。抽選から除外される。</td></tr>
+<tr><td>💀 限界</td><td>限界</td><td>疲れた。抽選から除外される。</td></tr>
+<tr><td>復帰</td><td>→アクティブ</td><td>休憩・限界から戻って抽選に参加する。</td></tr>
+</table>
+<div class="tip">休憩・限界ボタンは管理者以外でも自分のカードだけ操作できます。</div>
+</section>
+
+<!-- ══════════ ADMIN SETUP ══════════ -->
+<section id="admin-setup">
+<h2>👑 管理者向け初期設定</h2>
+
+<h3>管理者の設定</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">「メンバー」タブを開く</div><div class="step-desc">下部タブから「メンバー」を選択。</div></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">「👑 運営管理」ボタンをタップ</div><div class="step-desc">メンバー一覧の上にあるボタン。「本日」タブにも同じボタンがあります。</div></div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">管理者メンバーを選択して保存</div><div class="step-desc">複数選択可能。選択後「保存」をタップ。</div></div></div>
+</div>
+
+<h3>メンバーの登録</h3>
+<p>「メンバー」タブ → 「＋ メンバー追加」から名前・レベル・グループを設定して登録します。</p>
+
+<h3>入室コードの設定</h3>
+<p>「⚙️ 設定」→ 最下部「🔐 入室コード」セクションで設定します。設定後にメンバーへLINEで共有してください。</p>
+<div class="warn-box">入室コードは推測されにくい文字列にしてください。設定後は変更するまで有効です。</div>
+</section>
+
+<!-- ══════════ DRAW FLOW ══════════ -->
+<section id="draw">
+<h2>🏸 1日の練習の流れ</h2>
+
+<div class="flow">
+  <div class="flow-item">①本日タブで<br>参加者選択</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">②セッション<br>開始</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">③抽選する</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">④試合開始</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">⑤試合終了</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">③に戻る</div>
+</div>
+
+<div class="card accent" style="margin-top:20px">
+  <div class="card-title">① 本日タブ：参加者を選ぶ</div>
+  <p style="margin:0;font-size:13px;color:var(--text2)">その日来たメンバーにチェック。ビジター（一時参加）も追加できます。全員選択・全員解除ボタンも便利。</p>
+</div>
+<div class="card accent">
+  <div class="card-title">② セッション開始</div>
+  <p style="margin:0;font-size:13px;color:var(--text2)">「セッション開始」ボタンを押して練習を開始します。この操作で本日の練習日データが記録されます。</p>
+</div>
+<div class="card accent">
+  <div class="card-title">③ 抽選する</div>
+  <p style="margin:0;font-size:13px;color:var(--text2)">コートタブの「👑🏸 抽選する」で全コートを一括抽選。コートごとに個別抽選も可能。<br>
+  各コートのレベル指定（強/普/緩/ALL）に合わせて優先的に割り当てられます。</p>
+</div>
+<div class="card accent">
+  <div class="card-title">④ 試合開始（確定）</div>
+  <p style="margin:0;font-size:13px;color:var(--text2)">「✅ 全試合開始」で全コート一括確定。または各コートの「試合開始」ボタン。<br>
+  この操作で試合数がカウントされます。</p>
+</div>
+<div class="card accent">
+  <div class="card-title">⑤ 試合終了</div>
+  <p style="margin:0;font-size:13px;color:var(--text2)">「🏁 全試合終了」で全コート終了。終了後は待機エリアに戻り、③から繰り返します。</p>
+</div>
+
+<div class="warn-box">「試合開始」を押さずに「終了」を押した場合はキャンセル扱いになり、試合数は増えません。</div>
+</section>
+
+<!-- ══════════ PAGE: COURT ══════════ -->
+<section id="page-court">
+<h2>🏸 コートページ</h2>
+<p>メインの抽選・試合管理画面です。</p>
+
+<div class="mockup">
+  <div class="mockup-bar">
+    <span class="logo">Tachibana BADMINTON</span><span class="ver">v0.0.1</span>
+    <span style="margin-left:auto;font-size:10px;color:var(--green)">● 接続済</span>
+  </div>
+  <div class="mockup-tabs">
+    <div class="mockup-tab active">🏸 コート</div>
+    <div class="mockup-tab">📋 本日</div>
+    <div class="mockup-tab">👥 メンバー</div>
+    <div class="mockup-tab">📊 成績</div>
+    <div class="mockup-tab">💾 データ</div>
+  </div>
+  <div class="mockup-body">
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div class="m-btn primary" style="flex:1;justify-content:center">👑🏸 抽選する</div>
+      <div class="m-btn ghost">↩</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="m-btn primary" style="justify-content:center;font-size:11px">✅ 全試合開始</div>
+      <div class="m-btn warn" style="justify-content:center;font-size:11px">🏁 全試合終了</div>
+    </div>
+    <div class="m-court">
+      <div class="m-court-hd">
+        <span class="m-court-num">1</span>
+        <span style="font-size:12px;color:var(--text2)">コート 1</span>
+        <span style="margin-left:auto;display:flex;gap:4px">
+          <span class="m-court-lvl" style="background:rgba(255,23,68,.15);color:#ff1744">強</span>
+          <span class="m-court-lvl" style="background:rgba(0,212,255,.1);color:var(--text3)">普</span>
+          <span class="m-court-lvl" style="background:rgba(0,230,118,.1);color:var(--text3)">緩</span>
+        </span>
+      </div>
+      <div>
+        <div class="m-player"><div class="m-avatar" style="background:rgba(255,23,68,.2);color:#ff1744">K</div>kuma</div>
+        <div class="m-player"><div class="m-avatar" style="background:rgba(255,23,68,.2);color:#ff1744">は</div>はる</div>
+        <div class="m-player"><div class="m-avatar" style="background:rgba(0,212,255,.2);color:#00d4ff">ち</div>ちはる</div>
+        <div class="m-player"><div class="m-avatar" style="background:rgba(0,212,255,.2);color:#00d4ff">と</div>ともみ</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-top:10px;margin-bottom:6px">待機中 <span style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:2px 8px">8人</span></div>
+    <div class="m-wait"><div class="m-avatar" style="background:rgba(0,230,118,.2);color:#00e676;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px">く</div><span style="flex:1">くに</span><div class="m-bar-bg"><div class="m-bar" style="width:20%;background:#00e676"></div></div><span style="font-size:11px;color:var(--text3)">1試合</span></div>
+    <div class="m-wait"><div class="m-avatar" style="background:rgba(0,230,118,.2);color:#00e676;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px">は</div><span style="flex:1">はな</span><div class="m-bar-bg"><div class="m-bar" style="width:10%;background:#00e676"></div></div><span style="font-size:11px;color:var(--text3)">0試合</span></div>
+  </div>
+</div>
+
+<table>
+<tr><th>ボタン・機能</th><th>説明</th><th>権限</th></tr>
+<tr><td>👑🏸 抽選する</td><td>全コートを一括抽選。レベル指定コートを先に抽選し、ALLコートを最後に抽選。</td><td><span class="tag officer">担当</span></td></tr>
+<tr><td>↩ Undo</td><td>直前の操作を取り消す（最大20回）</td><td><span class="tag officer">担当</span></td></tr>
+<tr><td>✅ 全試合開始</td><td>配置済みの全コートを一括確定（試合数カウント開始）</td><td><span class="tag officer">担当</span></td></tr>
+<tr><td>🏁 全試合終了</td><td>進行中の全コートを終了</td><td><span class="tag officer">担当</span></td></tr>
+<tr><td>コートレベルボタン<br>強/普/緩/ALL</td><td>そのコートに優先的に呼ぶレベルを指定。ALLは全レベルから抽選。</td><td><span class="tag officer">担当</span></td></tr>
+<tr><td>このコートだけ抽選</td><td>未割当コートを個別に抽選</td><td><span class="tag officer">担当</span></td></tr>
+<tr><td>試合開始（コート内）</td><td>そのコートのみ確定</td><td><span class="tag officer">担当</span></td></tr>
+<tr><td>🏁（コート内）</td><td>そのコートのみ終了</td><td><span class="tag officer">担当</span></td></tr>
+<tr><td>😴 休憩 / 💀 限界</td><td>自分の状態を変更</td><td><span class="tag anyone">全員</span></td></tr>
+<tr><td>🎯 抽選担当</td><td>抽選担当者を設定・変更</td><td><span class="tag anyone">全員</span></td></tr>
+</table>
+
+<h3>待機エリアの表示</h3>
+<p>本日試合数が少ない順→同数ならレベル順に表示されます。状態アイコンの意味：</p>
+<table>
+<tr><th>アイコン</th><th>状態</th><th>試合数の目安</th></tr>
+<tr><td>😴</td><td>未出場</td><td>0試合</td></tr>
+<tr><td>😊</td><td>普通</td><td>2〜3試合</td></tr>
+<tr><td>😄</td><td>元気</td><td>4〜6試合</td></tr>
+<tr><td>😓</td><td>疲れ</td><td>7〜9試合</td></tr>
+<tr><td>😵</td><td>限界</td><td>10試合以上</td></tr>
+</table>
+</section>
+
+<!-- ══════════ PAGE: TODAY ══════════ -->
+<section id="page-today">
+<h2>📋 本日ページ</h2>
+<p>その日の参加メンバーを管理する画面です。</p>
+
+<div class="mockup">
+  <div class="mockup-tabs">
+    <div class="mockup-tab">🏸 コート</div>
+    <div class="mockup-tab active">📋 本日</div>
+    <div class="mockup-tab">👥 メンバー</div>
+  </div>
+  <div class="mockup-body">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="m-btn ghost" style="font-size:11px">全員選択</div>
+      <div class="m-btn ghost" style="font-size:11px">全員解除</div>
+      <div class="m-btn ghost" style="font-size:11px;background:rgba(124,58,237,.15);color:#a78bfa;border-color:rgba(124,58,237,.3)">＋ビジター</div>
+      <div class="m-btn primary" style="font-size:11px;margin-left:auto">セッション開始</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">
+      <div style="background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);color:var(--accent);padding:5px 12px;border-radius:20px;font-size:12px">kuma ✓</div>
+      <div style="background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);color:var(--accent);padding:5px 12px;border-radius:20px;font-size:12px">ちはる ✓</div>
+      <div style="background:var(--bg3);border:1px solid var(--border);color:var(--text3);padding:5px 12px;border-radius:20px;font-size:12px">くに</div>
+      <div style="background:var(--bg3);border:1px solid var(--border);color:var(--text3);padding:5px 12px;border-radius:20px;font-size:12px">はな</div>
+    </div>
+    <div class="m-btn warn" style="width:100%;justify-content:center;font-size:12px">🔄 最初からやり直す</div>
+  </div>
+</div>
+
+<table>
+<tr><th>操作</th><th>説明</th></tr>
+<tr><td>メンバーをタップ</td><td>参加・不参加の切り替え。選択済みは青でハイライト表示。</td></tr>
+<tr><td>全員選択 / 全員解除</td><td>一括で参加・不参加を設定</td></tr>
+<tr><td>＋ ビジター</td><td>その日だけ参加するゲストを一時登録</td></tr>
+<tr><td>セッション開始</td><td>選択した参加者で練習を開始。成績データに記録される。</td></tr>
+<tr><td>👑 運営管理</td><td>管理者の設定・変更</td></tr>
+<tr><td>🔄 最初からやり直す</td><td>本日の試合データ・参加者・コート状況をリセット（テスト後のリセットなどに使用）</td></tr>
+</table>
+</section>
+
+<!-- ══════════ PAGE: MEMBER ══════════ -->
+<section id="page-member">
+<h2>👥 メンバーページ</h2>
+<p>メンバーの管理・設定画面です。</p>
+
+<table>
+<tr><th>機能</th><th>説明</th><th>権限</th></tr>
+<tr><td>＋ メンバー追加</td><td>新しいメンバーを登録（名前・レベル・グループ）</td><td><span class="tag admin">管理者</span></td></tr>
+<tr><td>グループ管理</td><td>グループの追加・名前変更・色変更・並び替え</td><td><span class="tag admin">管理者</span></td></tr>
+<tr><td>レベル管理</td><td>レベルの名前・短縮名・色・優先順位を設定</td><td><span class="tag admin">管理者</span></td></tr>
+<tr><td>📁 プロジェクト</td><td>年度・シーズンの管理</td><td><span class="tag admin">管理者</span></td></tr>
+<tr><td>👑 運営管理</td><td>管理者の追加・変更</td><td><span class="tag anyone">全員</span>（自己登録可）</td></tr>
+<tr><td>メンバーカード<br>✏️ 編集</td><td>名前・レベル・グループの変更・削除</td><td><span class="tag admin">管理者</span></td></tr>
+<tr><td>メンバーカード<br>私? / 私✓</td><td>この端末での自分を設定・確認</td><td><span class="tag anyone">全員</span></td></tr>
+</table>
+
+<h3>ソート機能</h3>
+<p>グループ / 名前 / レベル / 試合数 / 参加率 / 最終参加 の順に並び替えができます。</p>
+
+<h3>レベル管理のポイント</h3>
+<div class="card">
+  <div class="card-title">デフォルトのレベル設定</div>
+  <p style="margin:0;font-size:13px;color:var(--text2)">
+    緩：いのちだいじに（優先度1位）<br>
+    普：みんながんばれ（優先度2位）<br>
+    強：ガンガンいこうぜ（優先度3位）<br>
+    <br>ドラッグで並び順を変更できます。スマホはタッチドラッグ対応。
+  </p>
+</div>
+</section>
+
+<!-- ══════════ PAGE: STATS ══════════ -->
+<section id="page-stats">
+<h2>📊 成績ページ</h2>
+<p>サークルの練習実績を確認できます。</p>
+
+<table>
+<tr><th>項目</th><th>説明</th></tr>
+<tr><td>開催回数</td><td>セッションを開始した練習日の回数</td></tr>
+<tr><td>平均試合数/1日</td><td>全コートの総試合数 ÷ 開催回数</td></tr>
+<tr><td>平均参加人数/1日</td><td>各練習日の参加者数の平均</td></tr>
+<tr><td>平均参加率/1日</td><td>各練習日の（参加正規メンバー数÷登録メンバー数）の平均</td></tr>
+<tr><td>練習日一覧</td><td>日付・参加者数・参加率・試合数の一覧。日付ごとに削除可能。</td></tr>
+<tr><td>参加率ランキング</td><td>初回参加以降の出席率ランキング。正規メンバー・ビジター区別表示。</td></tr>
+</table>
+
+<h3>日付別データ削除</h3>
+<p>「日付削除」ボタンから特定の練習日のデータのみ削除できます。ファイルは増えません。</p>
+</section>
+
+<!-- ══════════ PAGE: DATA ══════════ -->
+<section id="page-data">
+<h2>💾 データページ <span class="tag admin">管理者のみ</span></h2>
+<p>バックアップ・復元・LocalStorageの管理画面です。</p>
+
+<table>
+<tr><th>機能</th><th>説明</th></tr>
+<tr><td>📤 全データ書出し</td><td>メンバー・成績・設定すべてをJSONファイルでエクスポート</td></tr>
+<tr><td>📥 全データ読込み</td><td>エクスポートしたJSONファイルを読み込む</td></tr>
+<tr><td>👥 メンバー書出し</td><td>試合数・成績を除いたメンバー情報のみエクスポート</td></tr>
+<tr><td>👥 メンバー読込み</td><td>メンバー情報を読み込む（試合数はリセットされる）</td></tr>
+<tr><td>LocalStorage一覧</td><td>この端末に保存されているアプリデータの一覧と説明</td></tr>
+</table>
+
+<div class="tip">定期的に「全データ書出し」でバックアップすることをおすすめします。特に新しいプロジェクト開始前に。</div>
+</section>
+
+<!-- ══════════ SETTINGS ══════════ -->
+<section id="settings">
+<h2>⚙️ 設定ページ</h2>
+<p>ヘッダー右上の ⚙️ ボタンから開きます。<span class="tag admin">管理者のみ変更可</span></p>
+
+<table>
+<tr><th>設定項目</th><th>説明</th><th>デフォルト</th></tr>
+<tr><td>コート数</td><td>使用するコートの数（1〜10）</td><td>3</td></tr>
+<tr><td>コート別レベル</td><td>各コートに優先するレベルを指定</td><td>コート1=強、2=普、3=緩</td></tr>
+<tr><td>レベルマッチング</td><td>レベルが近い人同士でマッチングする</td><td>有効</td></tr>
+<tr><td>待機優先</td><td>待機時間が長い人を優先的に抽選する</td><td>有効</td></tr>
+<tr><td>連続試合制限</td><td>連続で何試合したら抽選から外すかの設定</td><td>無効</td></tr>
+<tr><td>顔アイコン設定</td><td>何試合でどのアイコンを表示するかの閾値</td><td>0/2/4/7/10試合</td></tr>
+<tr><td>🔐 入室コード</td><td>URLを知っていても入室できないようにするコード</td><td>未設定</td></tr>
+</table>
+
+<h3>連続試合制限の使い方</h3>
+<p>「最大試合数=0」に設定すると回数制限なし、インターバル時間のみ有効になります。</p>
+</section>
+
+<!-- ══════════ PROJECT ══════════ -->
+<section id="project">
+<h2>📁 プロジェクト（年度管理）</h2>
+<p>メンバーページの年度バッジ（例：「2026年度 ▼」）をタップして管理します。ヘッダーの ◀ ▶ ＋ でも操作できます。</p>
+
+<h3>プロジェクトとは</h3>
+<p>年度・シーズンなどの単位でデータを分けて管理する機能です。練習日・メンバーの試合数・成績データが各プロジェクトで独立して管理されます。</p>
+
+<h3>新しいプロジェクトの開始</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">「＋」ボタンまたは「📁 プロジェクト」をタップ</div><div class="step-desc">ヘッダーの「＋」ボタン、またはメンバータブの「📁 プロジェクト」ボタン。</div></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">年度名を入力</div><div class="step-desc">例：「2027年度」「夏季大会」など。</div></div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">メンバー引き継ぎを選択</div><div class="step-desc">「引き継ぐ」→同じメンバーで試合数0からスタート。「引き継がない」→メンバーも新規。</div></div></div>
+</div>
+
+<div class="warn-box">プロジェクト削除は元に戻せません。削除前に「💾 データページ」から全データをエクスポートしてください。</div>
+
+<table>
+<tr><th>操作</th><th>説明</th></tr>
+<tr><td>◀ ▶ ナビ</td><td>ヘッダーでプロジェクトを前後に切り替え</td></tr>
+<tr><td>年度名タップ</td><td>プロジェクト管理モーダルを開く</td></tr>
+<tr><td>切替</td><td>別のプロジェクトに切り替える</td></tr>
+<tr><td>編集</td><td>プロジェクト名を変更する</td></tr>
+<tr><td>削除</td><td>プロジェクトと全データを削除（要注意）</td></tr>
+</table>
+</section>
+
+<!-- ══════════ SECURITY ══════════ -->
+<section id="security">
+<h2>🔐 セキュリティ</h2>
+
+<h3>入室コード</h3>
+<p>URLを知っていてもコードなしでは使えません。メンバーへはLINEでコードを共有します。</p>
+<div class="card green">
+  <div class="card-title">設定手順</div>
+  ⚙️ 設定 → 最下部「🔐 入室コード」→ コードを入力 → 「設定」ボタン → メンバーにLINEで共有
+</div>
+<div class="warn-box">コードは推測されにくい文字列を使用してください。定期的に変更することを推奨します。</div>
+
+<h3>マイプロフィール（自分の端末認証）</h3>
+<p>ヘッダーの 👤 から自分を設定。PINコードを設定すると他の端末で成りすまされなくなります。</p>
+
+<h3>管理者権限</h3>
+<p>管理者は「👑 運営管理」から設定。管理者が設定されると、管理者以外は閲覧と自分の状態変更のみになります。</p>
+</section>
+
+<!-- ══════════ SHARE ══════════ -->
+<section id="share">
+<h2>🔗 共有・公開方法</h2>
+
+<h3>現在の構成（GitHub Pages + Firebase）</h3>
+<div class="card">
+  <p style="margin:0;font-size:13px;color:var(--text2)">
+    アプリURL（GitHub Pages）でHTMLを配信 → 全員が同じURLでアクセス<br>
+    Firebase Realtime Database → 管理者の操作がリアルタイムで全員に反映
+  </p>
+</div>
+
+<h3>メンバーへの共有手順</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">アプリのURLをLINEグループに貼る</div><div class="step-desc">例：https://ユーザー名.github.io/tachibana-badminton/</div></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">入室コードを別途共有</div><div class="step-desc">セキュリティのため、URLと入室コードは別々に共有することを推奨。</div></div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">ホーム画面への追加を案内</div><div class="step-desc">iPhone: Safari → 共有 → ホーム画面に追加。アプリのように使えます。</div></div></div>
+</div>
+
+<h3>HTMLの更新方法</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">新しいHTMLをダウンロード</div><div class="step-desc">ファイル名を index.html に変更する。</div></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">GitHubリポジトリにアップロード</div><div class="step-desc">リポジトリの「Add file」→「Upload files」から index.html をアップロード。</div></div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">ブラウザをハードリフレッシュ</div><div class="step-desc">PC: Ctrl+Shift+R、スマホ: ページを再読み込みして最新版を反映。</div></div></div>
+</div>
+
+<div class="tip">Firebaseのセキュリティルール期限（2026年5月29日）が切れる前に延長が必要です。Firebaseコンソールのルールタブで日付を更新してください。</div>
+
+<div class="div"></div>
+<p style="text-align:center;color:var(--text3);font-size:12px">Tachibana Badminton v0.0.1 使い方ガイド</p>
+</section>
+
+</main>
+
+<script>
+// Smooth scroll + active nav highlight
+document.querySelectorAll('.nav-item').forEach(function(a){
+  a.addEventListener('click',function(e){
+    e.preventDefault();
+    var target=document.querySelector(this.getAttribute('href'));
+    if(target) target.scrollIntoView({behavior:'smooth'});
+  });
+});
+var sections=document.querySelectorAll('section[id]');
+var navItems=document.querySelectorAll('.nav-item');
+window.addEventListener('scroll',function(){
+  var pos=window.scrollY+80;
+  sections.forEach(function(s){
+    if(pos>=s.offsetTop && pos<s.offsetTop+s.offsetHeight){
+      navItems.forEach(function(a){ a.classList.remove('active'); });
+      var active=document.querySelector('.nav-item[href="#'+s.id+'"]');
+      if(active) active.classList.add('active');
+    }
+  });
+});
+</script>
+</body>
+</html>
