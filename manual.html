@@ -94,8 +94,18 @@ tr:nth-child(even) td { background: rgba(255,255,255,.02); }
 <body>
 
 <!-- SIDEBAR -->
+<div style="display:none;position:fixed;top:0;left:0;right:0;z-index:200;background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 16px" id="mobile-topbar">
+  <a href="index.html" style="color:var(--accent);text-decoration:none;font-size:13px;font-weight:600">← アプリに戻る</a>
+  <span style="margin-left:12px;color:var(--text3);font-size:12px">Tachibana Badminton 使い方ガイド</span>
+</div>
+<style>@media(max-width:768px){#mobile-topbar{display:flex!important;align-items:center;} .main{padding-top:52px!important;}}</style>
 <nav class="sidebar">
-  <div class="sidebar-logo">
+  <div style="padding:10px 20px 0">
+    <a href="index.html" style="display:flex;align-items:center;gap:6px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);border-radius:8px;padding:8px 12px;text-decoration:none;color:var(--accent);font-size:12px;font-weight:600">
+      ← アプリに戻る
+    </a>
+  </div>
+  <div class="sidebar-logo" style="margin-top:10px">
     <div class="title">Tachibana BADMINTON</div>
     <div class="ver">v0.0.1 使い方ガイド</div>
   </div>
