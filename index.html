@@ -358,27 +358,33 @@ textarea.field{resize:vertical;min-height:60px}
 </head>
 <body>
 
-<!-- HEADER -->
-<div class="header">
-  <div style="flex:1;min-width:0">
-    <div class="hdr-logo">Tachibana <span style="color:var(--text2);font-size:14px;font-weight:500">BADMINTON</span><span style="color:var(--text3);font-size:11px;font-weight:400;margin-left:4px">v0.0.1</span></div>
-    <div class="hdr-date" id="hdr-date"></div>
-    <div class="fb-status" id="fb-status" title="Firebase接続状態"><span class="fb-dot offline" id="fb-dot"></span><span id="fb-status-text">オフライン</span></div>
+<!-- HEADER: compact single-row -->
+<div class="header" style="padding:4px 10px;gap:6px">
+  <!-- Left: logo + date + FB status inline -->
+  <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden">
+    <div class="hdr-logo" style="font-size:13px;white-space:nowrap">Tachibana <span style="color:var(--text2);font-size:12px">BM</span><span style="color:var(--text3);font-size:9px;margin-left:2px">v0.0.1</span></div>
+    <div class="hdr-date" id="hdr-date" style="font-size:10px;color:var(--text3);white-space:nowrap"></div>
+    <div id="fb-status" title="Firebase接続状態" style="display:flex;align-items:center;gap:3px;flex-shrink:0"><span class="fb-dot offline" id="fb-dot"></span><span id="fb-status-text" style="font-size:9px;color:var(--text3)">-</span></div>
   </div>
-  <!-- 年度切替 -->
-  <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
-    <button class="hdr-btn" id="hdr-prev-proj" onclick="prevProject()" title="前の年度">◀</button>
-    <div id="hdr-proj-name" onclick="openModal('modal-project')" style="font-size:11px;color:var(--accent);font-weight:600;cursor:pointer;white-space:nowrap;max-width:90px;overflow:hidden;text-overflow:ellipsis;text-align:center;padding:0 4px">-</div>
-    <button class="hdr-btn" id="hdr-next-proj" onclick="nextProject()" title="次の年度">▶</button>
-    <button class="hdr-btn" onclick="openNewProjectQuick()" title="新年度開始" style="font-size:12px">＋</button>
-    <button class="hdr-btn" id="id-pill-btn" onclick="openIdentityModal()" title="マイプロフィール" style="font-size:18px">👤</button>
-    <a class="hdr-btn" href="manual.html" target="_blank" title="使い方ガイド" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">❓</a>
-    <button class="hdr-btn" onclick="openModal('modal-settings')" title="設定">⚙️</button>
+  <!-- Center: year nav -->
+  <div style="display:flex;align-items:center;gap:2px;flex-shrink:0">
+    <button class="hdr-btn" id="hdr-prev-proj" onclick="prevProject()" title="前の年度" style="width:22px;height:22px;font-size:10px">◀</button>
+    <div id="hdr-proj-name" onclick="openModal('modal-project')" style="font-size:10px;color:var(--accent);font-weight:600;cursor:pointer;white-space:nowrap;max-width:72px;overflow:hidden;text-overflow:ellipsis;text-align:center;padding:0 2px">-</div>
+    <button class="hdr-btn" id="hdr-next-proj" onclick="nextProject()" title="次の年度" style="width:22px;height:22px;font-size:10px">▶</button>
+    <button class="hdr-btn" onclick="openNewProjectQuick()" title="新年度開始" style="width:22px;height:22px;font-size:11px">＋</button>
+    <button class="hdr-btn" onclick="openDrawOfficerModal()" title="抽選担当設定" id="draw-officer-hdr-btn" style="width:28px;height:28px;font-size:14px">🎯</button>
+    <div id="draw-officer-badge" style="display:none;font-size:9px;color:var(--accent);font-weight:600;white-space:nowrap;max-width:50px;overflow:hidden;text-overflow:ellipsis"></div>
+  </div>
+  <!-- Right: action buttons -->
+  <div style="display:flex;align-items:center;gap:2px;flex-shrink:0">
+    <button class="hdr-btn" id="id-pill-btn" onclick="openIdentityModal()" title="マイプロフィール" style="font-size:16px;width:28px;height:28px">👤</button>
+    <a class="hdr-btn" href="manual.html" target="_self" title="使い方ガイド" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px">❓</a>
+    <button class="hdr-btn" onclick="openModal('modal-settings')" title="設定" style="width:28px;height:28px">⚙️</button>
   </div>
 </div>
 
-<!-- TAB BAR -->
-<div class="tab-bar">
+<!-- TAB BAR: sticky, part of header area -->
+<div class="tab-bar" style="margin:0;border-radius:0;border-left:0;border-right:0;border-top:0;padding:3px 8px;position:sticky;top:37px;z-index:99;background:var(--bg2)">
   <button class="tab active" id="tab-court"   onclick="switchTab('court')"  ><span class="tab-icon">🏸</span>コート</button>
   <button class="tab"        id="tab-today"   onclick="switchTab('today')"  ><span class="tab-icon">📋</span>本日</button>
   <button class="tab"        id="tab-member"  onclick="switchTab('member')" ><span class="tab-icon">👥</span>メンバー</button>
@@ -394,10 +400,7 @@ textarea.field{resize:vertical;min-height:60px}
     <button class="draw-btn" id="draw-all-btn" onclick="drawAll()">👑🏸 抽選する</button>
     <button class="undo-btn" onclick="undoLast()" title="元に戻す">↩</button>
   </div>
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-    <div id="draw-officer-badge" style="display:none"></div>
-    <button class="btn ghost xs" onclick="openDrawOfficerModal()" style="font-size:11px">🎯 抽選担当</button>
-  </div>
+
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
     <button class="btn primary full" id="all-start-btn" onclick="confirmAllCourts()" style="font-size:13px;padding:10px">✅ 全試合開始</button>
     <button class="btn warn full" id="all-finish-btn" onclick="finishAllCourts()" style="font-size:13px;padding:10px">🏁 全試合終了</button>
@@ -1251,7 +1254,14 @@ function saveProjectRename(id){
   var p=g.projects.find(function(x){return x.id===id;}); if(!p) return;
   var inp=document.getElementById('prename-'+id);
   var val=inp?inp.value.trim():''; if(!val){ toast('名前を入力してください'); return; }
-  p.name=val; saveGlobal(g); renderProjectList(); updateCurrentProjectBadge();
+  p.name=val; p._ts=Date.now(); g._ts=Date.now(); fbGlobalTs=Date.now();
+  saveGlobal(g);
+  // Push updated global to Firebase
+  if(fbConnected&&fbDb){
+    var ts=Date.now(); fbLastPush=ts;
+    firebase.database(fbApp).ref('global').set({projects:g.projects,currentId:g.currentId,_ts:ts});
+  }
+  renderProjectList(); updateCurrentProjectBadge(); updateHeaderProjectNav();
   toast('プロジェクト名を変更しました');
 }
 function deleteProject(id){
@@ -3540,10 +3550,16 @@ function setDrawOfficer(memberId){
 }
 function renderDrawOfficerBadge(){
   var el=document.getElementById('draw-officer-badge'); if(!el) return;
-  if(!S.drawOfficerId){ el.style.display='none'; return; }
+  var btn=document.getElementById('draw-officer-hdr-btn');
+  if(!S.drawOfficerId){
+    el.style.display='none';
+    if(btn) btn.style.background='';
+    return;
+  }
   var m=S.members.find(function(x){return x.id===S.drawOfficerId;});
-  el.style.cssText='display:flex;align-items:center;gap:5px;background:var(--accent-a);border:1px solid var(--accent);border-radius:100px;padding:3px 10px;font-size:11px;color:var(--accent);font-weight:600';
-  el.textContent='🎯 担当: '+(m?m.name:'不明');
+  el.style.display='block';
+  el.textContent=(m?m.name:'?');
+  if(btn) btn.style.background='var(--accent-a)';
 }
 function openDrawOfficerModal(){
   var current=S.drawOfficerId;
