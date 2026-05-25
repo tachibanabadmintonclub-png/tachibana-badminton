@@ -484,8 +484,8 @@ textarea.field{resize:vertical;min-height:60px}
 
   <div id="admin-member-btns" style="display:flex;gap:7px;margin-bottom:6px;flex-wrap:wrap">
     <button class="btn primary sm" onclick="openAddMemberModal()">👑 ＋ メンバー追加</button>
-    <button class="btn ghost sm"   onclick="openModal('modal-groups')">グループ管理</button>
-    <button class="btn ghost sm"   onclick="openModal('modal-levels')">レベル管理</button>
+    <button class="btn ghost sm" onclick="if(requireAdmin())openModal('modal-groups')">グループ管理</button>
+    <button class="btn ghost sm" onclick="if(requireAdmin())openModal('modal-levels')">レベル管理</button>
   </div>
   <div style="display:flex;gap:7px;margin-bottom:10px">
     <button class="btn ghost sm" style="background:var(--yellow-a);border-color:var(--yellow);color:var(--yellow)" onclick="openModal('modal-admin')">👑 運営管理</button>
@@ -1033,6 +1033,7 @@ function fbApplyGlobal(d){
 
 function fbSubscribe(){
   if(fbRef){ try{fbRef.off();}catch(e){} }
+  fbListenCommands(); // コマンドチャンネルも監視
   var db=firebase.database(fbApp);
   // Listen to current project data
   fbRef=db.ref(fbGetPath());
@@ -1169,6 +1170,7 @@ function updateCurrentProjectBadge(){
   applyAdminUI();
 }
 function createNewProject(){
+  if(!requireAdmin()) return;
   var name=document.getElementById('new-proj-name').value.trim();
   if(!name){ toast('プロジェクト名を入力してください'); return; }
   var opt=document.querySelector('input[name="proj-member-opt"]:checked');
@@ -1312,13 +1314,15 @@ function renderProjectList(){
     var ds=d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate();
     var sid="'"+p.id+"'";
     var switchBtn=!isCurrent?('<button class="btn primary xs" onclick="switchProjectAndClose('+sid+')">切替</button>'):'';
+    var adminBtns=isAdmin()?(
+      '<button class="btn ghost xs" onclick="renameProject('+sid+')">編集</button>'
+      +(g.projects.length>1?'<button class="btn danger xs" onclick="deleteProject('+sid+')">削除</button>':'')
+    ):'';
     return '<div class="lvl-list-item" id="prow-'+p.id+'">'
       +(isCurrent?'<span style="font-size:10px;background:var(--accent-a);color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:1px 5px;flex-shrink:0;margin-right:4px">現在</span>':'')
       +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+escH(p.name)+'</div>'
       +'<div style="font-size:10px;color:var(--text3)">作成: '+ds+'</div></div>'
-      +switchBtn
-      +'<button class="btn ghost xs" onclick="renameProject('+sid+')">編集</button>'
-      +(g.projects.length>1?'<button class="btn danger xs" onclick="deleteProject('+sid+')">削除</button>':'')
+      +switchBtn+adminBtns
       +'</div>';
   }).join('');
   document.getElementById('project-list-area').innerHTML=html;
@@ -2020,7 +2024,7 @@ function syncCourts(){
   if(S.courts.length>n) S.courts=S.courts.slice(0,n);
   // デフォルトコートレベル設定
   if(!S.settings.courtLevels) S.settings.courtLevels={};
-  [[1,'1'],[2,'2'],[3,'3']].forEach(function(p){
+  [[1,'1'],[2,'any'],[3,'3']].forEach(function(p){
     if(!S.settings.courtLevels[p[0]]) S.settings.courtLevels[p[0]]=p[1];
   });
 }
@@ -2072,8 +2076,16 @@ function pickRandom(arr,n){
   return r.length===n?r:null;
 }
 function buildLevelSearchOrder(clvStr, pool){
-  // ALLは全員から抽選
-  if(clvStr==='any') return pool;
+  // ALLは全員から抽選（レベル優先度の低い順に並べる）
+  if(clvStr==='any'){
+    var lvlsSorted=sortedLevels(); // order昇順（緩が先頭）
+    return pool.slice().sort(function(a,b){
+      var oa=lvlsSorted.findIndex(function(l){return l.id===a.levelId;});
+      var ob=lvlsSorted.findIndex(function(l){return l.id===b.levelId;});
+      if(oa!==ob) return oa-ob; // レベル低い順
+      return (a.todayGames||0)-(b.todayGames||0); // 同レベルは試合数少ない順
+    });
+  }
 
   var targetId=parseInt(clvStr);
   var lvlsSorted=sortedLevels();
@@ -2147,6 +2159,8 @@ function drawForCourt(courtId){
     toast('コート'+courtId+': '+picked.length+'人配置。残り'+(4-picked.length)+'枠はマニュアルで設定してください');
     return 'partial';
   }
+  // ペア自動組み替え（弱強が同チームになるよう）
+  autoSwapPairs(courtId);
   return 'ok';
 }
 function drawAll(){
@@ -2158,14 +2172,16 @@ function drawAll(){
   }
   pushHistory();
   var n=0, shorts=[], msgs=[];
-  // レベル指定コートを先に抽選、ALLコートは最後
-  var levelCourts=S.courts.filter(function(c){
-    return !c.confirmed && (S.settings.courtLevels[c.id]||'any')!=='any';
-  });
-  var allCourts=S.courts.filter(function(c){
-    return !c.confirmed && (S.settings.courtLevels[c.id]||'any')==='any';
-  });
-  var ordered=levelCourts.concat(allCourts);
+  // レベル指定コートを先に抽選（レベル優先度の低い順）、ALLコートは最後
+  var lvlsSorted=sortedLevels(); // order昇順（緩=0が先頭）
+  function getCourtLvlOrder(c){
+    var lid=S.settings.courtLevels[c.id]||'any';
+    if(lid==='any') return 9999; // ALLは最後
+    var lvlIdx=lvlsSorted.findIndex(function(l){return l.id===parseInt(lid);});
+    return lvlIdx>=0?lvlIdx:9999;
+  }
+  var ordered=S.courts.filter(function(c){return !c.confirmed;})
+    .sort(function(a,b){return getCourtLvlOrder(a)-getCourtLvlOrder(b);});
   ordered.forEach(function(c){
     var r=drawForCourt(c.id);
     if(r==='ok'||r==='partial') n++;
@@ -2177,6 +2193,10 @@ function drawAll(){
 }
 function reshuffleCourt(courtId){
   if(!requireDrawOfficer()) return;
+  if(!S.todayParticipants.length && !S.todayDate){
+    toast('「本日」タブでセッションを開始してください');
+    return;
+  }
   pushHistory();
   var c=S.courts.find(function(x){return x.id===courtId;});
   if(c&&c.confirmed) revertCourtConfirm(c);
@@ -2720,25 +2740,10 @@ function resetTodayFull(){
   var msg='本日の以下のデータをリセットします：\n\n'+items+'\n\n※ 成績画面の過去データには影響しません。\n本当にリセットしますか？';
   confirmDialog('本日データをリセット', msg,
     function(){
-      var today=todayStr();
-      S.members.forEach(function(m){
-        // totalGamesから本日加算分を差し引く
-        var todayCount=m.todayGames||0;
-        m.totalGames=Math.max(0,(m.totalGames||0)-todayCount);
-        m.consecutiveGames=0; m.todayGames=0;
-        m.lastWaitStart=Date.now();
-        m.lastGameEndTime=null; m.lastGameStartTime=null; m.status='active';
-        // lastDateを本日以前の最終参加日に戻す
-        if(m.lastDate===today){
-          var prevSess=S.sessions.slice().reverse().find(function(s){
-            return s.date!==today && s.participants && s.participants.includes(m.id);
-          });
-          m.lastDate=prevSess?prevSess.date:null;
-        }
-      });
-      S.courts.forEach(function(c){ c.players=null; c.confirmed=false; });
-      S.todayParticipants=[]; S.todayDate=null;
-      save(); renderAll(); toast('本日データをリセットしました');
+      doResetToday();
+      fbSendCommand('resetToday'); // 全端末に同期
+      fbPush(false); // データも同期
+      toast('本日データをリセットしました（全端末に反映）');
     }, 'リセットする', 'warn');
 }
 
@@ -3008,7 +3013,7 @@ function openModal(id){
   if(id==='modal-groups') renderGroupsModal();
   if(id==='modal-levels') renderLevelsModal();
   if(id==='modal-project') renderProjectList();
-  if(id==='modal-draw-officer') openDrawOfficerModal();
+  if(id==='modal-draw-officer') { /* modal-bd opens via classList.add('open') below */ }
   if(id==='modal-admin'){ openAdminModal(); }
   if(id==='modal-identity'){ renderIdentityChips(); }
 }
@@ -3573,7 +3578,95 @@ function openDrawOfficerModal(){
       +escH(m.name)+(isCur?' ✓':'')
       +'</span>';
   }).join('');
-  openModal('modal-draw-officer');
+  document.getElementById('modal-draw-officer').classList.add('open');
+}
+
+/* ═══ Firebase Command Channel（全端末同期コマンド） ═══ */
+function fbSendCommand(cmd, data){
+  if(!fbConnected||!fbDb) return;
+  var ts=Date.now(); fbLastPush=ts;
+  firebase.database(fbApp).ref('command').set({cmd:cmd, data:data||{}, _ts:ts, by:getLocalMemberId()||'admin'});
+}
+function fbListenCommands(){
+  if(!fbConnected||!fbDb) return;
+  firebase.database(fbApp).ref('command').on('value',function(snap){
+    var d=snap.val(); if(!d||!d.cmd) return;
+    if(d._ts===fbLastPush) return; // our own echo
+    if(d.cmd==='resetToday'){
+      doResetToday();
+      toast('管理者により本日データがリセットされました');
+    } else if(d.cmd==='sessionStart'){
+      if(d.data&&d.data.participants) S.todayParticipants=d.data.participants;
+      if(d.data&&d.data.date) S.todayDate=d.data.date;
+      save(); renderAll(); toast('セッションが開始されました');
+    }
+  });
+}
+function doResetToday(){
+  todayPairHistory=[]; // ペア履歴リセット
+  var today=todayStr();
+  S.members.forEach(function(m){
+    var todayCount=m.todayGames||0;
+    m.totalGames=Math.max(0,(m.totalGames||0)-todayCount);
+    m.consecutiveGames=0; m.todayGames=0;
+    m.lastWaitStart=Date.now();
+    m.lastGameEndTime=null; m.lastGameStartTime=null; m.status='active';
+    if(m.lastDate===today){
+      var prevSess=S.sessions.slice().reverse().find(function(s){
+        return s.date!==today && s.participants && s.participants.includes(m.id);
+      });
+      m.lastDate=prevSess?prevSess.date:null;
+    }
+  });
+  S.courts.forEach(function(c){ c.players=null; c.confirmed=false; });
+  S.todayParticipants=[]; S.todayDate=null;
+  save(); renderAll();
+}
+
+/* ═══ ペア自動組み替え ═══ */
+var todayPairHistory=[]; // その日のペア履歴 [{a:id,b:id}]
+
+function getLevelOrder(memberId){
+  var m=S.members.find(function(x){return x.id===memberId;}); if(!m) return 0;
+  var lvl=getLevelById(m.levelId);
+  return lvl?lvl.order:0;
+}
+function pairKey(a,b){ return Math.min(a,b)+'-'+Math.max(a,b); }
+function countPairs(a,b){ return todayPairHistory.filter(function(p){return pairKey(p.a,p.b)===pairKey(a,b);}).length; }
+
+function autoSwapPairs(courtId){
+  var c=S.courts.find(function(x){return x.id===courtId;});
+  if(!c||!c.players||c.players.some(function(p){return p==null;})) return;
+  var ids=c.players.slice(); // [p0,p1,p2,p3] - p0&p1 vs p2&p3
+  // 各プレイヤーのレベルorder取得
+  var orders=ids.map(getLevelOrder);
+  // 最適ペアリング: なるべく異レベルを同チームに、かつ過去ペアが少ない組合せ
+  // 6通りの組み合わせを試す
+  var combos=[
+    [[0,1],[2,3]], [[0,2],[1,3]], [[0,3],[1,2]]
+  ];
+  var best=null, bestScore=Infinity;
+  combos.forEach(function(combo){
+    var t1=combo[0], t2=combo[1];
+    // スコア: レベル差（同チームは差が大きいほど良い=スコア小）+ ペア履歴ペナルティ
+    var lvlDiff1=Math.abs(orders[t1[0]]-orders[t1[1]]);
+    var lvlDiff2=Math.abs(orders[t2[0]]-orders[t2[1]]);
+    var pairPenalty=countPairs(ids[t1[0]],ids[t1[1]])+countPairs(ids[t2[0]],ids[t2[1]]);
+    // 異レベルが同チームになるほど良い（スコア低い）、ペア重複は悪い
+    var score = (4-lvlDiff1) + (4-lvlDiff2) + pairPenalty*3;
+    if(score<bestScore){ bestScore=score; best=combo; }
+  });
+  if(best){
+    var t1=best[0], t2=best[1];
+    c.players=[ids[t1[0]],ids[t1[1]],ids[t2[0]],ids[t2[1]]];
+  }
+}
+function recordPairs(courtId){
+  var c=S.courts.find(function(x){return x.id===courtId;});
+  if(!c||!c.players) return;
+  var ids=c.players.filter(function(p){return p!=null;});
+  if(ids.length>=2) todayPairHistory.push({a:ids[0],b:ids[1]});
+  if(ids.length>=4) todayPairHistory.push({a:ids[2],b:ids[3]});
 }
 
 /* ============================================================
