@@ -2388,6 +2388,11 @@ function buildPinBtn(mid,hasPinSet){
   return '<button class="btn warn xs" onclick="'+fn+'" style="margin-left:8px">🔑 PINを設定</button>';
 }
 function openIdentityModal(){
+  // If club code protection is active and not satisfied, force code-entry instead
+  if(!hasValidCode()){
+    try{ closeAllModals(); showCodeEntry(function(ok){}); }catch(e){}
+    return;
+  }
   var me=getMyMember();
   var el=document.getElementById('identity-current'); if(el){
     if(me){
