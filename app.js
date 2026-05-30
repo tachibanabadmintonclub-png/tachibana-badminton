@@ -53,6 +53,15 @@ const STORAGE_KEY = 'bm_v2_state';
 const GLOBAL_KEY = 'bm_v2_global';
 
 const FB_URL = 'https://tachibana-badminton-default-rtdb.asia-southeast1.firebasedatabase.app';
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAb4b6mROJcdAJCiIqV7TKfNC9zL-tq63M",
+  authDomain: "tachibana-badminton.firebaseapp.com",
+  databaseURL: "https://tachibana-badminton-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "tachibana-badminton",
+  storageBucket: "tachibana-badminton.firebasestorage.app",
+  messagingSenderId: "861101115493",
+  appId: "1:861101115493:web:2ced9c26330499bd90de8c"
+};
 const FB_PATH = 'projects/';
 
 var fbApp=null, fbDb=null, fbRef=null, fbConnected=false;
@@ -67,29 +76,49 @@ function fbInit(){
       try{
         fbApp=firebase.app('tbadminton');
       }catch(e){
-        fbApp=firebase.initializeApp({databaseURL:FB_URL},'tbadminton');
+        fbApp=firebase.initializeApp(FIREBASE_CONFIG,'tbadminton');
       }
       fbDb=firebase.database(fbApp);
     }
-    fbSetStatus('syncing','接続中...');
-    // .info/connected monitors real-time connection state
-    firebase.database(fbApp).ref('.info/connected').on('value',function(snap){
-      var wasConnected=fbConnected;
-      fbConnected=snap.val()===true;
-      if(fbConnected){
-        fbSetStatus('online','接続済');
-        if(!wasConnected) fbSubscribe(); // only subscribe on new connection
-      } else{
-        fbSetStatus('offline','オフライン');
-      }
-    });
-    // Also try a direct read to detect connection faster
-    setTimeout(function(){
-      firebase.database(fbApp).ref('.info/serverTimeOffset').once('value')
-        .then(function(){ if(!fbConnected){ fbConnected=true; fbSetStatus('online','接続済'); fbSubscribe(); } })
-        .catch(function(e){ console.warn('FB connectivity test:',e); });
-    },2000);
+    if(fbApp && fbApp.options && fbApp.options.apiKey){
+      fbSetStatus('syncing','認証中...');
+      var auth=firebase.auth(fbApp);
+      auth.onAuthStateChanged(function(user){
+        if(user){
+          fbSetStatus('syncing','接続準備中...');
+          startFbConnection();
+        } else {
+          auth.signInAnonymously()
+            .then(function(){ /* anonymous auth started */ })
+            .catch(function(e){ console.warn('FB auth:',e); fbSetStatus('offline','認証エラー'); });
+        }
+      });
+    } else {
+      fbSetStatus('syncing','認証未設定');
+      startFbConnection();
+    }
   }catch(e){ console.warn('Firebase init:',e); fbSetStatus('offline','初期化エラー'); }
+}
+
+function startFbConnection(){
+
+  if(!fbApp||!fbDb) return;
+  fbSetStatus('syncing','接続中...');
+  firebase.database(fbApp).ref('.info/connected').on('value',function(snap){
+    var wasConnected=fbConnected;
+    fbConnected=snap.val()===true;
+    if(fbConnected){
+      fbSetStatus('online','接続済');
+      if(!wasConnected) fbSubscribe();
+    } else{
+      fbSetStatus('offline','オフライン');
+    }
+  });
+  setTimeout(function(){
+    firebase.database(fbApp).ref('.info/serverTimeOffset').once('value')
+      .then(function(){ if(!fbConnected){ fbConnected=true; fbSetStatus('online','接続済'); fbSubscribe(); } })
+      .catch(function(e){ console.warn('FB connectivity test:',e); });
+  },2000);
 }
 function fbSetStatus(state,text){
   var dot=document.getElementById('fb-dot');
@@ -171,10 +200,10 @@ function fbSubscribe(){
   // Listen to current project data
   fbRef=db.ref(fbGetPath());
   fbRef.on('value',function(snap){ fbApplyProjectData(snap.val()); },
-    function(e){ console.warn('FB project listen:',e); fbSetStatus('offline','読取エラー'); });
+    function(e){ console.warn('FB project listen:',e); fbSetStatus('offline', e && e.code==='permission_denied' ? '権限不足' : '読取エラー'); });
   // Listen to global project list
   db.ref('global').on('value',function(snap){ fbApplyGlobal(snap.val()); },
-    function(e){ console.warn('FB global listen:',e); });
+    function(e){ console.warn('FB global listen:',e); fbSetStatus('offline', e && e.code==='permission_denied' ? '権限不足' : '読取エラー'); });
 }
 function fbPush(includeGlobal){
   if(!isAdmin()) return; // 管理者のみ書き込み
