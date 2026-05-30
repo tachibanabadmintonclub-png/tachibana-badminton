@@ -190,6 +190,13 @@ function fbApplyGlobal(d){
   } else {
     saveGlobal(g); updateCurrentProjectBadge(); updateHeaderProjectNav();
   }
+  // If club code is set remotely and this client hasn't entered it, force code-entry overlay
+  try{
+    var remoteCode=getClubCode();
+    if(remoteCode && !hasValidCode()){
+      setTimeout(function(){ try{ closeAllModals(); showCodeEntry(function(ok){ if(ok) { /* proceed as normal */ } }); }catch(e){} },50);
+    }
+  }catch(e){}
   console.log('[FB] global applied, projects='+d.projects.length+' ts='+inTs);
 }
 
@@ -303,7 +310,20 @@ function initWithFirebaseGlobal(){
   if(!window._needsFirebaseGlobalFetch) return;
   window._needsFirebaseGlobalFetch=false;
   fbFetchGlobal(function(fbGlobal){
-    if(!fbGlobal || !fbGlobal.projects || fbGlobal.projects.length===0) return; // Firebase にも何もない
+    if(!fbGlobal || !fbGlobal.projects || fbGlobal.projects.length===0){
+      // Even if no global, try to fetch meta/clubCode so code-protection works
+      try{
+        if(fbConnected&&fbDb){
+          firebase.database(fbApp).ref('meta/clubCode').once('value').then(function(snap){
+            var code = snap.val()||''; var g = loadGlobal()||{projects:[],currentId:null};
+            if(code && g.clubCode!==code){ g.clubCode = code; saveGlobal(g); updateClubCodeDisplay();
+              try{ if(code && !hasValidCode()){ setTimeout(function(){ try{ closeAllModals(); showCodeEntry(function(ok){}); }catch(e){} },50); } }catch(e){}
+            }
+          }).catch(function(){});
+        }
+      }catch(ex){}
+      return; // Firebase にも何もない
+    }
     var localG=loadGlobal();
     if(localG && localG.projects[0] && localG.projects[0]._tempNew){
       // ローカルは仮作成、Firebase から新しいデータを取得
@@ -312,6 +332,17 @@ function initWithFirebaseGlobal(){
       if(fbGlobal.currentId) switchProject(fbGlobal.currentId);
       console.log('[Init] Firebase global applied: '+fbGlobal.projects.length+' projects');
     }
+    // Also try to fetch meta/clubCode so we can enforce code entry immediately
+    try{
+      if(fbConnected&&fbDb){
+        firebase.database(fbApp).ref('meta/clubCode').once('value').then(function(snap){
+          var code = snap.val()||''; var g2 = loadGlobal()||{projects:[],currentId:null};
+          if(code && g2.clubCode!==code){ g2.clubCode = code; saveGlobal(g2); updateClubCodeDisplay();
+            try{ if(code && !hasValidCode()){ setTimeout(function(){ try{ closeAllModals(); showCodeEntry(function(ok){}); }catch(e){} },50); } }catch(e){}
+          }
+        }).catch(function(){});
+      }
+    }catch(ex){}
   });
 }
 function switchProjectAndClose(id){ closeModal('modal-project'); switchProject(id); }
@@ -352,7 +383,7 @@ function switchProject(id){
   syncCourts(); renderAll();
   var p=getCurrentProject();
   toast('プロジェクトを切り替えました: '+(p?p.name:''));
-  setTimeout(checkFirstTimeIdentity,400);
+  setTimeout(function(){ if(hasValidCode()) checkFirstTimeIdentity(); },400);
   fbResubscribe(); // Firebaseリスナーを切替
   // Push the new global state immediately
   setTimeout(fbPush,500);
@@ -599,7 +630,7 @@ function doInit(){
     var el=document.getElementById(id);if(el)el.style.display='none';
   });
   renderAll();applyAdminUI();updateHeaderProjectNav();
-  checkFirstTimeIdentity();
+  if(hasValidCode()){ checkFirstTimeIdentity(); }
   setTimeout(fbSyncClubCode,3000);
   // 初回セットアップが必要な場合、管理者設定画面を自動オープン
   if(!S.adminIds||S.adminIds.length===0){
@@ -614,16 +645,35 @@ function doInit(){
 function init(){
   initProjects();
   fbInit();
-  // Firebase 接続を待って global をフェッチ
-  setTimeout(function(){
+  // If we flagged that we need to fetch global from Firebase (new browser),
+  // wait briefly for initWithFirebaseGlobal to apply before finishing initialization.
+  if(window._needsFirebaseGlobalFetch){
+    // Trigger a fetch immediately
     initWithFirebaseGlobal();
-  },800);
-  // 通常の初期化フロー
-  var code=getClubCode();
-  if(code&&!hasValidCode()){
-    showCodeEntry(function(ok){if(ok)doInit();});
-  }else{
-    doInit();
+    // Poll a short time (max ~2s) for the fetched global to be applied,
+    // then proceed with the usual code-entry check / doInit.
+    var waited = 0;
+    var waitInterval = setInterval(function(){
+      var code = getClubCode();
+      // proceed when either: a) code exists and needs entry, b) fetch flag cleared, c) timeout
+      if((code && !hasValidCode()) || !window._needsFirebaseGlobalFetch || waited > 2000){
+        clearInterval(waitInterval);
+        if(code && !hasValidCode()){
+          showCodeEntry(function(ok){ if(ok) doInit(); });
+        } else {
+          doInit();
+        }
+      }
+      waited += 250;
+    },250);
+  } else {
+    // Normal flow when no Firebase global fetch is pending
+    var code = getClubCode();
+    if(code && !hasValidCode()){
+      showCodeEntry(function(ok){ if(ok) doInit(); });
+    } else {
+      doInit();
+    }
   }
 }
 function checkDateChange(){
