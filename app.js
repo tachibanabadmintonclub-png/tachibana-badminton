@@ -645,6 +645,14 @@ function doInit(){
 function init(){
   initProjects();
   fbInit();
+  // If club code exists and not yet provided on this client, block initialization
+  var earlyCode=getClubCode();
+  if(earlyCode && !hasValidCode()){
+    window._pendingInit=true; // prevent other prompts
+    closeAllModals();
+    showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
+    return;
+  }
   // If we flagged that we need to fetch global from Firebase (new browser),
   // wait briefly for initWithFirebaseGlobal to apply before finishing initialization.
   if(window._needsFirebaseGlobalFetch){
@@ -2433,6 +2441,8 @@ function renderSelfBtn(memberId){
   return '<div class="ico-btn" style="font-size:10px;color:var(--text3)" title="これが自分?" onclick="selectMyIdentity('+memberId+')">私?</div>';
 }
 function checkFirstTimeIdentity(){
+  // If club code protection is active and not satisfied, do not prompt identity yet
+  if(!hasValidCode()) return;
   if(!hasIdentity()&&S.members.length>0){
     var btn=document.getElementById('id-pill-btn');
     if(btn){ btn.style.background='var(--orange-a)'; btn.style.borderColor='var(--orange)'; }
