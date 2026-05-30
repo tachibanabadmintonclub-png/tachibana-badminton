@@ -213,6 +213,18 @@ function fbAgo(ts){
 }
 function fbResubscribe(){ if(fbConnected) fbSubscribe(); }
 
+/* Firebase から global を非同期で読み込む */
+function fbFetchGlobal(callback){
+  if(!fbConnected||!fbDb){ if(callback)callback(null); return; }
+  try{
+    firebase.database(fbApp).ref('global').once('value',function(snap){
+      var d=snap.val();
+      if(d&&d.projects&&Array.isArray(d.projects)){ if(callback)callback(d); }
+      else { if(callback)callback(null); }
+    }).catch(function(e){ console.warn('fbFetchGlobal:',e); if(callback)callback(null); });
+  }catch(e){ console.warn('fbFetchGlobal error:',e); if(callback)callback(null); }
+}
+
 function loadGlobal(){
   try{
     var r=localStorage.getItem(GLOBAL_KEY);
@@ -234,12 +246,18 @@ function getCurrentProject(){
 }
 function initProjects(){
   var g=loadGlobal();
+  var hasLocal=(g && g.projects && g.projects.length>0);
+  if(!hasLocal){
+    // ローカルに global がない場合、Firebase からフェッチを試みる（同期的に待つ）
+    // ただし、initProjects は同期的であるため、Firebase 待機は initWithFirebase で行う
+    // ここでは「Firebase待機のためのフラグ」を立てて、Firebase初期化後に完了させる
+    window._needsFirebaseGlobalFetch=true;
+  }
   if(!g){
-    // First run OR corrupted global: rebuild
+    // First run: 仮の global を作成（Firebase fetch 待機中）
     var fid='proj_'+Date.now();
-    g={projects:[{id:fid,name:CURRENT_YEAR+'年度',createdAt:Date.now()}],currentId:fid};
+    g={projects:[{id:fid,name:CURRENT_YEAR+'年度',createdAt:Date.now(),_tempNew:true}],currentId:fid};
     var ex=localStorage.getItem(STORAGE_KEY);
-    // Validate existing data
     try{ if(ex) JSON.parse(ex); else ex=null; }catch(e){ ex=null; }
     if(ex) localStorage.setItem(getProjectKey(fid),ex);
     saveGlobal(g);
@@ -251,6 +269,21 @@ function initProjects(){
       try{ JSON.parse(projData); localStorage.setItem(STORAGE_KEY,projData); }catch(e){}
     }
   }
+}
+function initWithFirebaseGlobal(){
+  if(!window._needsFirebaseGlobalFetch) return;
+  window._needsFirebaseGlobalFetch=false;
+  fbFetchGlobal(function(fbGlobal){
+    if(!fbGlobal || !fbGlobal.projects || fbGlobal.projects.length===0) return; // Firebase にも何もない
+    var localG=loadGlobal();
+    if(localG && localG.projects[0] && localG.projects[0]._tempNew){
+      // ローカルは仮作成、Firebase から新しいデータを取得
+      fbGlobal._ts=fbGlobal._ts||Date.now();
+      saveGlobal(fbGlobal);
+      if(fbGlobal.currentId) switchProject(fbGlobal.currentId);
+      console.log('[Init] Firebase global applied: '+fbGlobal.projects.length+' projects');
+    }
+  });
 }
 function switchProjectAndClose(id){ closeModal('modal-project'); switchProject(id); }
 function switchProject(id){
@@ -527,17 +560,36 @@ function doInit(){
   if(!S.groups||!S.groups.length)S.groups=defaultGroups();
   if(!S.settings.faceThresholds||!S.settings.faceThresholds.length)S.settings.faceThresholds=defaultFaces();
   if(!S.settings.levelConsec)S.settings.levelConsec={};
+  // adminIds が空（未セットアップ）の場合、初回セットアップをガイド
+  if(!S.adminIds||S.adminIds.length===0){
+    window._allowOpenMode=true; // 初回セットアップ時のみ全員操作可
+  }
   syncCourts();checkDateChange();updateHeaderDate();
   setInterval(updateHeaderDate,60000);setInterval(checkDateChange,60000);
   ['rest-section-hd','rest-note','tired-section-hd','tired-note'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.style.display='none';
   });
   renderAll();applyAdminUI();updateHeaderProjectNav();
-  checkFirstTimeIdentity();fbInit();
+  checkFirstTimeIdentity();
   setTimeout(fbSyncClubCode,3000);
+  // 初回セットアップが必要な場合、管理者設定画面を自動オープン
+  if(!S.adminIds||S.adminIds.length===0){
+    setTimeout(function(){
+      var me=getMyMember();
+      if(me){
+        setTimeout(function(){ openAdminModal(); },300);
+      }
+    },500);
+  }
 }
 function init(){
   initProjects();
+  fbInit();
+  // Firebase 接続を待って global をフェッチ
+  setTimeout(function(){
+    initWithFirebaseGlobal();
+  },800);
+  // 通常の初期化フロー
   var code=getClubCode();
   if(code&&!hasValidCode()){
     showCodeEntry(function(ok){if(ok)doInit();});
@@ -2379,8 +2431,12 @@ function setLocalMemberId(id){
   try{ if(id) localStorage.setItem(ADMIN_KEY,String(id)); else localStorage.removeItem(ADMIN_KEY); }catch(e){}
 }
 function isAdmin(){
-  // Admin if: adminIds is empty (no admins set = open mode), OR local member id is in adminIds
-  if(!S.adminIds||S.adminIds.length===0) return true;
+  // Admin if: local member id is in adminIds
+  // adminIds が空 = セットアップ未完了 → 最初のセットアップ時のみ全員操作可 (doInit で限定)
+  if(!S.adminIds||S.adminIds.length===0) {
+    // 初回セットアップ時のみ許可（詳細は initFirstSetup で制御）
+    return window._allowOpenMode===true;
+  }
   var lid=getLocalMemberId();
   return lid&&S.adminIds.includes(parseInt(lid));
 }
@@ -2444,8 +2500,19 @@ function saveAdminSettings(){
     }
   }
   save(); closeModal('modal-admin');
+  // 管理者が設定されたので、オープンモードを終了
+  window._allowOpenMode=false;
+  // Firebase に管理者 ID を保存（他の端末と同期）
+  if(fbConnected&&fbDb){
+    try{
+      var ts=Date.now(); fbLastPush=ts;
+      firebase.database(fbApp).ref(fbGetPath()).update({adminIds:S.adminIds,_ts:ts})
+        .catch(function(e){ console.warn('Failed to push adminIds:',e); });
+    }catch(ex){}
+  }
   applyAdminUI();
-  toast('運営管理設定を保存しました');
+  updateAdminHeader();
+  toast('運営管理設定を保存しました（Firebase 同期中）');
 }
 function claimAdminIdentity(memberId){
   setLocalMemberId(memberId);
