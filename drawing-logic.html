@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>抽選ロジック解説 - Tachibana Badminton</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #070c18; --bg2: #0d1528; --bg3: #111d35; --bg4: #162040;
+  --accent: #00d4ff; --accent2: #7c3aed; --green: #00e676; --red: #ff1744; --yellow: #ffd600;
+  --text: #e8eaf6; --text2: #9ba3c0; --text3: #5a6480;
+  --border: rgba(255,255,255,.08); --r: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 14px; line-height: 1.7; }
+.container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+header { margin-bottom: 40px; }
+h1 { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+.subtitle { color: var(--text3); font-size: 13px; margin-bottom: 20px; }
+.back-link { display: inline-block; margin-bottom: 20px; color: var(--accent); text-decoration: none; font-size: 13px; font-weight: 600; }
+.back-link:hover { text-decoration: underline; }
+
+section { margin-bottom: 50px; }
+h2 { font-family: 'Rajdhani', sans-serif; font-size: 24px; font-weight: 700; color: var(--accent); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+h3 { font-size: 16px; font-weight: 700; color: var(--text); margin: 24px 0 12px; }
+p { color: var(--text2); margin-bottom: 10px; }
+
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 16px 18px; margin-bottom: 12px; }
+.card.tip { border-left: 3px solid var(--accent); background: rgba(0,212,255,.05); }
+.card.default { border-left: 3px solid var(--green); background: rgba(0,230,118,.05); }
+.card.warning { border-left: 3px solid var(--yellow); background: rgba(255,214,0,.05); }
+
+.flow-diagram { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 24px; margin: 16px 0; }
+.flow-step { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+.flow-step:last-child { margin-bottom: 0; }
+.step-num { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; margin-top: 4px; }
+.step-content { flex: 1; }
+.step-title { font-weight: 700; color: var(--text); margin-bottom: 4px; font-size: 14px; }
+.step-desc { color: var(--text2); font-size: 13px; }
+.step-example { background: var(--bg4); border-left: 2px solid var(--accent2); padding: 10px 12px; margin-top: 8px; border-radius: 6px; font-size: 12px; color: var(--text3); font-family: 'Rajdhani', sans-serif; }
+
+.comparison-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+.comparison-table th { background: var(--bg3); padding: 12px; text-align: left; border-bottom: 2px solid var(--border); font-weight: 700; font-size: 13px; color: var(--text); }
+.comparison-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text2); font-size: 13px; }
+.comparison-table tr:nth-child(even) { background: rgba(255,255,255,.02); }
+
+.diagram { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin: 16px 0; text-align: center; }
+.member-boxes { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 12px 0; }
+.member-box { background: var(--bg4); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 12px; min-width: 80px; text-align: center; }
+.member-box.selected { background: var(--accent); color: #000; font-weight: 700; border-color: var(--accent); }
+.member-box.waiting { border: 2px dashed var(--yellow); color: var(--yellow); }
+.member-box.blocked { opacity: 0.5; color: var(--text3); }
+
+.arrow { color: var(--text3); font-size: 20px; margin: 0 8px; }
+.priority-list { background: var(--bg4); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin: 12px 0; }
+.priority-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.priority-item:last-child { border-bottom: none; }
+.priority-num { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px; flex-shrink: 0; }
+.priority-name { flex: 1; }
+.priority-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.priority-badge.wait { background: rgba(255,214,0,.15); color: var(--yellow); }
+.priority-badge.games { background: rgba(0,212,255,.15); color: var(--accent); }
+
+.examples-section { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin: 16px 0; }
+.example { margin-bottom: 20px; }
+.example:last-child { margin-bottom: 0; }
+.example-title { font-weight: 700; color: var(--accent); margin-bottom: 10px; font-size: 14px; }
+.example-item { background: var(--bg3); border-left: 2px solid var(--accent); padding: 10px 12px; margin-bottom: 6px; font-size: 12px; color: var(--text2); }
+
+.tag { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 4px; }
+.tag.default { background: rgba(0,230,118,.15); color: var(--green); }
+.tag.custom { background: rgba(123,58,237,.15); color: var(--accent2); }
+
+code { background: var(--bg3); padding: 2px 6px; border-radius: 4px; color: var(--accent); font-family: 'Rajdhani', monospace; font-size: 12px; }
+
+@media(max-width:768px) { .container { padding: 20px 16px; } h1 { font-size: 24px; } h2 { font-size: 18px; } }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<a href="manual.html" class="back-link">← 使い方ガイドに戻る</a>
+
+<header>
+  <h1>🏸 抽選ロジック解説</h1>
+  <p class="subtitle">「抽選する」ボタンが何をしているのかを詳しく説明します</p>
+</header>
+
+<!-- ===== デフォルト設定での抽選 ===== -->
+<section>
+  <h2>デフォルト設定での抽選フロー</h2>
+  
+  <div class="card default">
+    <strong>デフォルト設定：</strong><br>
+    • スキルレベルマッチング：<code>有効</code> (指定レベルのメンバーを優先)<br>
+    • 待機優先：<code>有効</code> (長く待っている人を優先)<br>
+    • 連続ゲーム制限：<code>なし</code>
+  </div>
+
+  <div class="flow-diagram">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">本日の参加メンバーから「利用可能な人」をピックアップ</div>
+        <div class="step-desc">
+          除外される人：
+          <ul style="margin-top: 6px; margin-left: 20px; color: var(--text3); font-size: 12px;">
+            <li>すでに別のコートに配置されている人</li>
+            <li>ステータスが「休憩中」または「限界」の人</li>
+            <li>連続ゲーム制限に引っかかっている人</li>
+          </ul>
+        </div>
+        <div class="step-example">例：本日参加12名 → 利用可能10名</div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">コート1、コート2の順で抽選</div>
+        <div class="step-desc">
+          各コートに設定されたレベルに応じて配置戦略を変更します：
+        </div>
+        <div class="step-example">
+          <strong>コート1（レベル1指定）:</strong> レベル1のメンバーを優先<br>
+          <strong>コート2（全員対象）:</strong> 全員の中からバランスよく選出
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">優先度にしたがって4人を選出</div>
+        <div class="step-desc">
+          <strong>待機優先の場合：</strong> より長く待っている人を優先<br>
+          <strong>試合数優先の場合：</strong> 試合数が少ない人を優先
+        </div>
+        <div class="step-example">
+          待機時間：A(20分) > B(10分) > C(5分) > D(2分)<br>
+          → 配置順：A, B, C, D
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <div class="step-title">コートに4人を配置</div>
+        <div class="step-desc">
+          4人揃わない場合は、空きスロットはマニュアルで埋める必要があります。
+        </div>
+        <div class="step-example">例：利用可能2人のみ → 2人配置 + 2スロット空き</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 抽選例 ===== -->
+<section>
+  <h2>具体的な抽選例</h2>
+
+  <h3>例1: レベルマッチング + 待機優先（デフォルト）</h3>
+  <div class="diagram">
+    <div style="margin-bottom: 16px;">
+      <strong style="color: var(--accent);">本日参加メンバー：</strong>
+    </div>
+    <div class="member-boxes">
+      <div class="member-box">Aさん<br><span style="font-size:11px;color:#666">Lv1・待機15分</span></div>
+      <div class="member-box">Bさん<br><span style="font-size:11px;color:#666">Lv1・待機8分</span></div>
+      <div class="member-box">Cさん<br><span style="font-size:11px;color:#666">Lv2・待機12分</span></div>
+      <div class="member-box">Dさん<br><span style="font-size:11px;color:#666">Lv3・待機5分</span></div>
+      <div class="member-box">Eさん<br><span style="font-size:11px;color:#666">Lv2・待機20分</span></div>
+      <div class="member-box">Fさん<br><span style="font-size:11px;color:#666">Lv1・待機3分</span></div>
+    </div>
+
+    <div style="margin: 20px 0; padding: 16px; background: var(--bg4); border-radius: 8px;">
+      <div style="margin-bottom: 12px;">
+        <strong style="color: var(--accent);">コート1（Lv1指定）に4人抽選：</strong>
+      </div>
+      <div class="priority-list">
+        <div class="priority-item">
+          <div class="priority-num">1</div>
+          <div class="priority-name">Aさん（Lv1、待機15分）</div>
+          <div class="priority-badge wait">待機長い</div>
+        </div>
+        <div class="priority-item">
+          <div class="priority-num">2</div>
+          <div class="priority-name">Bさん（Lv1、待機8分）</div>
+          <div class="priority-badge wait">待機長い</div>
+        </div>
+        <div class="priority-item">
+          <div class="priority-num">3</div>
+          <div class="priority-name">Fさん（Lv1、待機3分）</div>
+          <div class="priority-badge wait">Lv1最後</div>
+        </div>
+        <div class="priority-item">
+          <div class="priority-num">4</div>
+          <div class="priority-name">Eさん（Lv2、待機20分）</div>
+          <div class="priority-badge games">Lv1不足分補充</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 12px; color: var(--text3); font-size: 12px;">
+      ✓ Lv1が3人いるので全員配置<br>
+      ✓ 4人目は待機時間が最長のEさん（Lv2）を補充
+    </div>
+  </div>
+
+  <h3>例2: 全員対象コート（ALL）の抽選</h3>
+  <div class="diagram">
+    <div style="margin-bottom: 16px;">
+      <strong style="color: var(--accent);">コート2（全員対象）に4人抽選：</strong>
+    </div>
+    <div style="background: var(--bg4); border-radius: 8px; padding: 16px; margin: 12px 0;">
+      <div style="font-size: 12px; color: var(--text3); margin-bottom: 12px;">
+        コート1で配置済み：A, B, F, E（4人）<br>
+        利用可能：C, D（2人）→ <strong style="color: var(--red);">メンバー不足</strong>
+      </div>
+      <div style="padding: 10px; background: rgba(255,23,68,.1); border-left: 2px solid var(--red); border-radius: 4px; color: var(--text2); font-size: 12px;">
+        ⚠️ 利用可能なメンバーが2人のみ<br>
+        → コート2に Cさん、Dさん を配置<br>
+        → 残り2スロットは「マニュアル設定が必要」と表示
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 設定による変化 ===== -->
+<section>
+  <h2>設定を変更するとどうなるか？</h2>
+
+  <h3>1️⃣ 待機優先 → 試合数優先に変更</h3>
+  <div class="card">
+    <strong style="color: var(--yellow);">設定変更：</strong> 「待機優先」をOFF<br><br>
+    <strong style="color: var(--text);">抽選ロジック：</strong> 待機時間ではなく、試合数が少ない人を優先
+  </div>
+
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>設定</th>
+        <th>優先される人</th>
+        <th>効果</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="tag default">デフォルト</span><br>待機優先</td>
+        <td>長く待っている人</td>
+        <td>新参者や試合が少ない人は待っている間に機会が来ない可能性</td>
+      </tr>
+      <tr>
+        <td><span class="tag custom">変更後</span><br>試合数優先</td>
+        <td>試合数が少ない人</td>
+        <td>全員が均等に試合機会を得やすくなる</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2️⃣ 連続ゲーム制限を有効にする</h3>
+  <div class="card">
+    <strong style="color: var(--yellow);">設定変更：</strong> 「連続ゲーム制限」をON、最大2ゲームに設定<br><br>
+    <strong style="color: var(--text);">抽選ロジック：</strong> 連続で3ゲーム目をしようとする人を自動で除外
+  </div>
+
+  <div class="diagram">
+    <div style="margin-bottom: 12px;">
+      <strong style="color: var(--accent);">制限なし場合：</strong><br>
+      <span style="color: var(--text3); font-size: 12px;">Xさんが1日に10ゲーム連続でプレイ可能 → 疲労が溜まる</span>
+    </div>
+    <div style="background: rgba(0,230,118,.05); border-left: 2px solid var(--green); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+      <strong style="color: var(--green);">制限あり場合（最大2ゲーム）：</strong><br>
+      <span style="color: var(--text2); font-size: 12px;">Xさんが2ゲーム目まで → 3ゲーム目で自動除外 → 休憩 → 回復後に再度抽選可能</span>
+    </div>
+  </div>
+
+  <h3>3️⃣ コート別レベル設定で「スキルマッチング」をカスタマイズ</h3>
+  <div class="card">
+    <strong style="color: var(--yellow);">設定例：</strong><br>
+    • コート1 = Lv2（中級者向け）<br>
+    • コート2 = 全員対象（初心者〜上級者混合）<br><br>
+    <strong style="color: var(--text);">効果：</strong> Lv2の人が集中してプレイできる環境を実現
+  </div>
+
+  <div class="examples-section">
+    <div class="example">
+      <div class="example-title">例：中級者大会モード</div>
+      <div class="example-item">コート1 = Lv2（本格的なラリー）</div>
+      <div class="example-item">コート2 = Lv2（本格的なラリー）</div>
+      <div class="example-item">コート3 = ALL（初心者向け練習）</div>
+      <div style="margin-top: 8px; color: var(--text3); font-size: 12px;">
+        → Lv2が多い日は、Lv2同士で実力が拮抗した試合ができる
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== よくある質問 ===== -->
+<section>
+  <h2>よくある質問</h2>
+
+  <h3>Q1: 同じ人ばかり選ばれるのはなぜ？</h3>
+  <div class="card">
+    <strong style="color: var(--accent);">A:</strong> 待機優先の場合、待機時間が長い人が繰り返し選ばれます。<br><br>
+    <strong>解決方法：</strong>
+    <ul style="margin-top: 8px; margin-left: 20px; color: var(--text2); font-size: 13px;">
+      <li>設定から「試合数優先」に変更して、試合経験の少ない人を優先する</li>
+      <li>または、連続ゲーム制限を設定して、同じ人が連続プレイするのを制限する</li>
+    </ul>
+  </div>
+
+  <h3>Q2: 「メンバー不足」と表示されたら？</h3>
+  <div class="card">
+    <strong style="color: var(--accent);">A:</strong> 利用可能なメンバーが4人未満の場合、空きスロットが発生します。<br><br>
+    <strong>対応方法：</strong>
+    <ul style="margin-top: 8px; margin-left: 20px; color: var(--text2); font-size: 13px;">
+      <li>画面上の空きスロット（グレー）をタップして、メンバーを手動で配置する</li>
+      <li>または、本日タブで参加メンバーを追加する</li>
+    </ul>
+  </div>
+
+  <h3>Q3: レベル1とレベル2が混在するコートでうまく配置できない</h3>
+  <div class="card">
+    <strong style="color: var(--accent);">A:</strong> コート別にレベルを指定しているため、指定レベルが少ない場合は補充されます。<br><br>
+    <strong>例：</strong> コート1をLv1指定で、本日Lv1が1人のみ → Lv1を1人配置 + Lv2から3人補充<br><br>
+    <strong>調整方法：</strong>
+    <ul style="margin-top: 8px; margin-left: 20px; color: var(--text2); font-size: 13px;">
+      <li>そのコートを「全員対象」に変更してレベル混合を容認する</li>
+      <li>または、参加メンバーのレベル構成を調整する</li>
+    </ul>
+  </div>
+
+  <h3>Q4: 「連続ゲーム制限」の「インターバル」とは？</h3>
+  <div class="card">
+    <strong style="color: var(--accent);">A:</strong> 前の試合終了から次の試合開始までの最小待機時間です。<br><br>
+    <strong>例：</strong> インターバル30分、Aさんが15:00に試合終了<br>
+    → 15:30までは次の抽選対象から除外
+  </div>
+</section>
+
+<!-- ===== フッター ===== -->
+<section style="margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; color: var(--text3); font-size: 12px;">
+  <p>このページは抽選ロジックの概要です。詳細な設定は、設定画面（⚙️）から確認できます。</p>
+  <a href="manual.html" style="color: var(--accent); text-decoration: none; font-weight: 600;">← 使い方ガイドに戻る</a>
+</section>
+
+</div>
+
+</body>
+</html>
