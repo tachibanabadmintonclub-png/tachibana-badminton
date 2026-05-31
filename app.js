@@ -2791,6 +2791,19 @@ function getClubCode(){
   var code = (g&&g.clubCode)?g.clubCode:'';
   console.log('[SECURITY] getClubCode() =', code, '(from global)');
   return code;
+}
+function hasValidCode(){
+  var code=getClubCode();
+  // If no code is set remotely, allow access (no protection)
+  if(!code){
+    console.log('[SECURITY] hasValidCode = true (no code set)');
+    return true;
+  }
+  // If code is set remotely, require matching stored code
+  var stored = getStoredCode();
+  var valid = stored === code;
+  console.log('[SECURITY] hasValidCode = ' + valid + ' (code set: ' + code + ', stored: ' + stored + ')');
+  return valid;
 }function hasValidCode(){var code=getClubCode();if(!code)return true;return getStoredCode()===code;}
 function hideStartupOverlay(){
   var ov=document.getElementById('startup-overlay'); if(ov) ov.style.display='none';
