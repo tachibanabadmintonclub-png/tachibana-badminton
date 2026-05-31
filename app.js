@@ -678,9 +678,20 @@ function init(){
     showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
     return;
   }
-  // If we don't yet have global info (new browser) try a quick REST fetch for meta/clubCode
-  if(window._needsFirebaseGlobalFetch && !earlyCode){
-    // Attempt quick fetch (useful for WebViews like LINE where SDK init may be blocked/slow)
+
+  if(!earlyCode){
+    window._clubCodeCheckPending=true;
+    var finishInit=function(){
+      window._clubCodeCheckPending=false;
+      var code=getClubCode();
+      if(code && !hasValidCode()){
+        window._pendingInit=true;
+        showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
+      } else {
+        doInit();
+      }
+    };
+
     quickFetchClubCodeREST(1200, function(code){
       try{
         if(code){
@@ -693,39 +704,29 @@ function init(){
           }
         }
       }catch(e){}
-      // fall back to existing fetch/wait logic
-      // Trigger a fetch immediately
-      initWithFirebaseGlobal();
-      // Poll a short time (max ~2s) for the fetched global to be applied,
-      // then proceed with the usual code-entry check / doInit.
+
+      // Trigger Firebase global fetch if needed, but still wait a short time
+      if(window._needsFirebaseGlobalFetch){
+        initWithFirebaseGlobal();
+      }
       var waited = 0;
       var waitInterval = setInterval(function(){
         var code2 = getClubCode();
         if((code2 && !hasValidCode()) || !window._needsFirebaseGlobalFetch || waited > 2000){
           clearInterval(waitInterval);
-          if(code2 && !hasValidCode()){
-            window._pendingInit=true;
-            showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
-          } else {
-            doInit();
-          }
+          finishInit();
         }
         waited += 250;
       },250);
     });
     return;
   }
-  // If we flagged that we need to fetch global from Firebase (new browser),
-  // wait briefly for initWithFirebaseGlobal to apply before finishing initialization.
+
   if(window._needsFirebaseGlobalFetch){
-    // Trigger a fetch immediately
     initWithFirebaseGlobal();
-    // Poll a short time (max ~2s) for the fetched global to be applied,
-    // then proceed with the usual code-entry check / doInit.
     var waited = 0;
     var waitInterval = setInterval(function(){
       var code = getClubCode();
-      // proceed when either: a) code exists and needs entry, b) fetch flag cleared, c) timeout
       if((code && !hasValidCode()) || !window._needsFirebaseGlobalFetch || waited > 2000){
         clearInterval(waitInterval);
         if(code && !hasValidCode()){
@@ -738,7 +739,6 @@ function init(){
       waited += 250;
     },250);
   } else {
-    // Normal flow when no Firebase global fetch is pending
     var code = getClubCode();
     if(code && !hasValidCode()){
       window._pendingInit=true;
@@ -2513,7 +2513,7 @@ function renderSelfBtn(memberId){
 }
 function checkFirstTimeIdentity(){
   // If club code protection is active and not satisfied, do not prompt identity yet
-  if(!hasValidCode()) return;
+  if(!hasValidCode() || window._clubCodeCheckPending) return;
   if(!hasIdentity()&&S.members.length>0){
     var btn=document.getElementById('id-pill-btn');
     if(btn){ btn.style.background='var(--orange-a)'; btn.style.borderColor='var(--orange)'; }
