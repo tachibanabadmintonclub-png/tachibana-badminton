@@ -331,8 +331,10 @@ function initProjects(){
 }
 function initWithFirebaseGlobal(){
   if(!window._needsFirebaseGlobalFetch) return;
-  window._needsFirebaseGlobalFetch=false;
+  window._firebaseGlobalFetchPending=true;
   fbFetchGlobal(function(fbGlobal){
+    window._firebaseGlobalFetchPending=false;
+    window._needsFirebaseGlobalFetch=false;
     if(!fbGlobal || !fbGlobal.projects || fbGlobal.projects.length===0){
       // Even if no global, try to fetch meta/clubCode so code-protection works
       try{
@@ -712,7 +714,7 @@ function init(){
       var waited = 0;
       var waitInterval = setInterval(function(){
         var code2 = getClubCode();
-        if((code2 && !hasValidCode()) || !window._needsFirebaseGlobalFetch || waited > 2000){
+        if((code2 && !hasValidCode()) || (!window._needsFirebaseGlobalFetch && !window._firebaseGlobalFetchPending) || waited > 2000){
           clearInterval(waitInterval);
           finishInit();
         }
@@ -727,7 +729,7 @@ function init(){
     var waited = 0;
     var waitInterval = setInterval(function(){
       var code = getClubCode();
-      if((code && !hasValidCode()) || !window._needsFirebaseGlobalFetch || waited > 2000){
+      if((code && !hasValidCode()) || (!window._needsFirebaseGlobalFetch && !window._firebaseGlobalFetchPending) || waited > 2000){
         clearInterval(waitInterval);
         if(code && !hasValidCode()){
           window._pendingInit=true;
