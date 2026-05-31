@@ -272,6 +272,18 @@ function enforceClubCodeGuard(action){
   return true;
 }
 
+// Quick REST fetch for clubCode (useful in WebView like LINE where Firebase SDK may be slow)
+function quickFetchClubCodeREST(timeoutMs, cb){
+  try{
+    var base = FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? FIREBASE_CONFIG.databaseURL.replace(/\/$/, '') : FB_URL.replace(/\/$/, '');
+    var url = base + '/meta/clubCode.json';
+    var ac = new AbortController();
+    var to = setTimeout(function(){ ac.abort(); if(cb) cb(null); }, timeoutMs||1200);
+    fetch(url, {method:'GET', signal:ac.signal}).then(function(res){ clearTimeout(to); if(!res.ok){ if(cb)cb(null); return; } return res.json(); })
+      .then(function(data){ try{ if(data==null){ if(cb)cb(null); } else { if(cb)cb(String(data)); } }catch(e){ if(cb)cb(null); }}).catch(function(){ clearTimeout(to); if(cb)cb(null); });
+  }catch(e){ if(cb)cb(null); }
+}
+
 function loadGlobal(){
   try{
     var r=localStorage.getItem(GLOBAL_KEY);
@@ -656,12 +668,49 @@ function doInit(){
 function init(){
   initProjects();
   fbInit();
-  // If club code exists and not yet provided on this client, block initialization
+  // If club code exists locally and not yet provided on this client, block initialization
   var earlyCode=getClubCode();
   if(earlyCode && !hasValidCode()){
     window._pendingInit=true; // prevent other prompts
     closeAllModals();
     showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
+    return;
+  }
+  // If we don't yet have global info (new browser) try a quick REST fetch for meta/clubCode
+  if(window._needsFirebaseGlobalFetch && !earlyCode){
+    // Attempt quick fetch (useful for WebViews like LINE where SDK init may be blocked/slow)
+    quickFetchClubCodeREST(1200, function(code){
+      try{
+        if(code){
+          var g = loadGlobal()||{projects:[],currentId:null};
+          if(g.clubCode!==code){ g.clubCode=code; saveGlobal(g); updateClubCodeDisplay(); }
+          if(!hasValidCode()){
+            window._pendingInit=true;
+            showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
+            return;
+          }
+        }
+      }catch(e){}
+      // fall back to existing fetch/wait logic
+      // Trigger a fetch immediately
+      initWithFirebaseGlobal();
+      // Poll a short time (max ~2s) for the fetched global to be applied,
+      // then proceed with the usual code-entry check / doInit.
+      var waited = 0;
+      var waitInterval = setInterval(function(){
+        var code2 = getClubCode();
+        if((code2 && !hasValidCode()) || !window._needsFirebaseGlobalFetch || waited > 2000){
+          clearInterval(waitInterval);
+          if(code2 && !hasValidCode()){
+            window._pendingInit=true;
+            showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
+          } else {
+            doInit();
+          }
+        }
+        waited += 250;
+      },250);
+    });
     return;
   }
   // If we flagged that we need to fetch global from Firebase (new browser),
