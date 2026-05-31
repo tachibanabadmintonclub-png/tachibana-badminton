@@ -261,6 +261,17 @@ function fbFetchGlobal(callback){
   }catch(e){ console.warn('fbFetchGlobal error:',e); if(callback)callback(null); }
 }
 
+function enforceClubCodeGuard(action){
+  if(!hasValidCode()){
+    if(!document.getElementById('code-overlay')){
+      closeAllModals();
+      showCodeEntry(function(ok){ if(ok && typeof action==='function'){ action(); }});
+    }
+    return false;
+  }
+  return true;
+}
+
 function loadGlobal(){
   try{
     var r=localStorage.getItem(GLOBAL_KEY);
@@ -747,6 +758,7 @@ function updateHeaderDate(){
 ============================================================ */
 let currentTab = 'court';
 function switchTab(tab){
+  if(!enforceClubCodeGuard(function(){ switchTab(tab); })) return;
   currentTab = tab;
   ['court','today','member','history','data'].forEach(t=>{
     document.getElementById('pane-'+t).classList.toggle('active', t===tab);
@@ -2282,6 +2294,7 @@ function undoLast(){
    MODAL SYSTEM
 ============================================================ */
 function openModal(id){
+  if(!enforceClubCodeGuard(function(){ openModal(id); })) return;
   document.getElementById(id).classList.add('open');
   if(id==='modal-settings') openSettingsModal();
   if(id==='modal-groups') renderGroupsModal();
@@ -2621,11 +2634,13 @@ function updateAdminHeader(){
 
 // Year navigation in header
 function prevProject(){
+  if(!enforceClubCodeGuard(function(){ prevProject(); })) return;
   var g=loadGlobal(); if(!g||g.projects.length<=1) return;
   var idx=g.projects.findIndex(function(p){return p.id===g.currentId;});
   if(idx>0) switchProject(g.projects[idx-1].id);
 }
 function nextProject(){
+  if(!enforceClubCodeGuard(function(){ nextProject(); })) return;
   var g=loadGlobal(); if(!g||g.projects.length<=1) return;
   var idx=g.projects.findIndex(function(p){return p.id===g.currentId;});
   if(idx<g.projects.length-1) switchProject(g.projects[idx+1].id);
@@ -2644,6 +2659,7 @@ function updateHeaderProjectNav(){
   if(nextBtn) nextBtn.style.opacity=idx<g.projects.length-1?'1':'0.3';
 }
 function openNewProjectQuick(){
+  if(!enforceClubCodeGuard(function(){ openNewProjectQuick(); })) return;
   var d=new Date(); var nextYear=d.getFullYear()+1;
   document.getElementById('quick-proj-name').value=nextYear+'年度';
   openModal('modal-newproj-quick');
@@ -2870,6 +2886,7 @@ function renderDrawOfficerBadge(){
   if(btn) btn.style.background='var(--accent-a)';
 }
 function openDrawOfficerModal(){
+  if(!enforceClubCodeGuard(function(){ openDrawOfficerModal(); })) return;
   var current=S.drawOfficerId;
   document.getElementById('draw-officer-list').innerHTML=S.members.map(function(m){
     var lvl=getLevelById(m.levelId);
