@@ -274,16 +274,14 @@ function enforceClubCodeGuard(action){
 
 // Quick REST fetch for clubCode (useful in WebView like LINE where Firebase SDK may be slow)
 function quickFetchClubCodeREST(timeoutMs, cb){
-  console.log('[REST] Starting quickFetchClubCodeREST with timeout=' + (timeoutMs||1200) + 'ms');
   try{
     var base = FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? FIREBASE_CONFIG.databaseURL.replace(/\/$/, '') : FB_URL.replace(/\/$/, '');
     var url = base + '/meta/clubCode.json';
-    console.log('[REST] Fetching from:', url);
     var ac = new AbortController();
-    var to = setTimeout(function(){ console.log('[REST] Timeout reached'); ac.abort(); if(cb) cb(null); }, timeoutMs||1200);
-    fetch(url, {method:'GET', signal:ac.signal}).then(function(res){ clearTimeout(to); console.log('[REST] Response status:', res.status); if(!res.ok){ if(cb)cb(null); return; } return res.json(); })
-      .then(function(data){ try{ if(data==null){ console.log('[REST] Data is null'); if(cb)cb(null); } else { console.log('[REST] Got data:', data); if(cb)cb(String(data)); } }catch(e){ console.warn('[REST] Parse error:', e); if(cb)cb(null); }}).catch(function(e){ clearTimeout(to); console.warn('[REST] Fetch error:', e); if(cb)cb(null); });
-  }catch(e){ console.warn('[REST] Init error:', e); if(cb)cb(null); }
+    var to = setTimeout(function(){ ac.abort(); if(cb) cb(null); }, timeoutMs||1200);
+    fetch(url, {method:'GET', signal:ac.signal}).then(function(res){ clearTimeout(to); if(!res.ok){ if(cb)cb(null); return; } return res.json(); })
+      .then(function(data){ try{ if(data==null){ if(cb)cb(null); } else { if(cb)cb(String(data)); } }catch(e){ if(cb)cb(null); }}).catch(function(){ clearTimeout(to); if(cb)cb(null); });
+  }catch(e){ if(cb)cb(null); }
 }
 
 function loadGlobal(){
@@ -308,17 +306,14 @@ function getCurrentProject(){
 function initProjects(){
   var g=loadGlobal();
   var hasLocal=(g && g.projects && g.projects.length>0);
-  console.log('[INIT] initProjects: hasLocal =', hasLocal, ', g =', g);
   if(!hasLocal){
     // ローカルに global がない場合、Firebase からフェッチを試みる（同期的に待つ）
     // ただし、initProjects は同期的であるため、Firebase 待機は initWithFirebase で行う
     // ここでは「Firebase待機のためのフラグ」を立てて、Firebase初期化後に完了させる
-    console.log('[INIT] Setting _needsFirebaseGlobalFetch=true');
     window._needsFirebaseGlobalFetch=true;
   }
   if(!g){
     // First run: 仮の global を作成（Firebase fetch 待機中）
-    console.log('[INIT] No global found, creating temp global');
     var fid='proj_'+Date.now();
     g={projects:[{id:fid,name:CURRENT_YEAR+'年度',createdAt:Date.now(),_tempNew:true}],currentId:fid};
     var ex=localStorage.getItem(STORAGE_KEY);
@@ -336,33 +331,27 @@ function initProjects(){
 }
 function initWithFirebaseGlobal(){
   if(!window._needsFirebaseGlobalFetch) return;
-  console.log('[FB] initWithFirebaseGlobal called');
   window._firebaseGlobalFetchPending=true;
   fbFetchGlobal(function(fbGlobal){
-    console.log('[FB] fbFetchGlobal callback: fbGlobal =', fbGlobal);
     window._firebaseGlobalFetchPending=false;
     window._needsFirebaseGlobalFetch=false;
     if(!fbGlobal || !fbGlobal.projects || fbGlobal.projects.length===0){
-      console.log('[FB] No global projects, trying to fetch meta/clubCode');
       // Even if no global, try to fetch meta/clubCode so code-protection works
       try{
         if(fbConnected&&fbDb){
           firebase.database(fbApp).ref('meta/clubCode').once('value').then(function(snap){
             var code = snap.val()||''; var g = loadGlobal()||{projects:[],currentId:null};
-            console.log('[FB] meta/clubCode from Firebase:', code);
             if(code && g.clubCode!==code){ g.clubCode = code; saveGlobal(g); updateClubCodeDisplay();
               try{ if(code && !hasValidCode()){ setTimeout(function(){ try{ closeAllModals(); showCodeEntry(); }catch(e){} },50); } }catch(e){}
             }
-          }).catch(function(e){ console.warn('[FB] meta/clubCode fetch error:', e); });
+          }).catch(function(){});
         }
-      }catch(ex){ console.warn('[FB] Exception fetching meta/clubCode:', ex); }
+      }catch(ex){}
       return; // Firebase にも何もない
     }
     var localG=loadGlobal();
-    console.log('[FB] localG =', localG);
     if(localG && localG.projects[0] && localG.projects[0]._tempNew){
       // ローカルは仮作成、Firebase から新しいデータを取得
-      console.log('[FB] Applying Firebase global to temp project');
       fbGlobal._ts=fbGlobal._ts||Date.now();
       saveGlobal(fbGlobal);
       if(fbGlobal.currentId) switchProject(fbGlobal.currentId);
@@ -651,7 +640,6 @@ function defaultFaces(){
    INIT
 ============================================================ */
 function doInit(){
-  console.log('[INIT] doInit called - hiding startup overlay and proceeding');
   hideStartupOverlay();
   load();
   if(!S.levels||!S.levels.length)S.levels=defaultLevels();
@@ -681,15 +669,12 @@ function doInit(){
   }
 }
 function init(){
-  console.log('[INIT] Starting init...');
   initProjects();
   fbInit();
   showStartupOverlay('入室コードを確認しています…');
   // If club code exists locally and not yet provided on this client, block initialization
   var earlyCode=getClubCode();
-  console.log('[INIT] earlyCode =', earlyCode, ', hasValidCode() =', hasValidCode());
   if(earlyCode && !hasValidCode()){
-    console.log('[INIT] Branch: earlyCode exists but not valid → showCodeEntry');
     window._pendingInit=true; // prevent other prompts
     closeAllModals();
     showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
@@ -697,51 +682,39 @@ function init(){
   }
 
   if(!earlyCode){
-    console.log('[INIT] Branch: no earlyCode → starting quickFetchClubCodeREST + Firebase wait');
     window._clubCodeCheckPending=true;
     var finishInit=function(){
-      console.log('[INIT] finishInit called');
       window._clubCodeCheckPending=false;
       var code=getClubCode();
-      console.log('[INIT] finishInit: code =', code, ', hasValidCode() =', hasValidCode());
       if(code && !hasValidCode()){
-        console.log('[INIT] finishInit: code exists but not valid → showCodeEntry');
         window._pendingInit=true;
         showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
       } else {
-        console.log('[INIT] finishInit: proceeding to doInit');
         doInit();
       }
     };
 
     quickFetchClubCodeREST(1200, function(code){
-      console.log('[INIT] quickFetchClubCodeREST callback: code =', code);
       try{
         if(code){
           var g = loadGlobal()||{projects:[],currentId:null};
-          console.log('[INIT] REST code fetched, setting global. old clubCode =', g.clubCode);
           if(g.clubCode!==code){ g.clubCode=code; saveGlobal(g); updateClubCodeDisplay(); }
           if(!hasValidCode()){
-            console.log('[INIT] REST code set but not valid locally → showCodeEntry');
             window._pendingInit=true;
             showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
             return;
           }
         }
-      }catch(e){ console.warn('[INIT] REST callback error:', e); }
+      }catch(e){}
 
       // Trigger Firebase global fetch if needed, but still wait a short time
       if(window._needsFirebaseGlobalFetch){
-        console.log('[INIT] Triggering Firebase global fetch');
         initWithFirebaseGlobal();
       }
       var waited = 0;
       var waitInterval = setInterval(function(){
         var code2 = getClubCode();
-        var proceed = (code2 && !hasValidCode()) || (!window._needsFirebaseGlobalFetch && !window._firebaseGlobalFetchPending) || waited > 2000;
-        if(waited === 0 || waited % 1000 === 0) console.log('[INIT] Wait loop: waited=' + waited + 'ms, code2=' + code2 + ', needsFFetch=' + window._needsFirebaseGlobalFetch + ', fetchPending=' + window._firebaseGlobalFetchPending + ', proceed=' + proceed);
-        if(proceed){
-          console.log('[INIT] Wait loop: condition met, calling finishInit');
+        if((code2 && !hasValidCode()) || (!window._needsFirebaseGlobalFetch && !window._firebaseGlobalFetchPending) || waited > 2000){
           clearInterval(waitInterval);
           finishInit();
         }
@@ -752,37 +725,27 @@ function init(){
   }
 
   if(window._needsFirebaseGlobalFetch){
-    console.log('[INIT] Branch: needsFirebaseGlobalFetch = true → calling initWithFirebaseGlobal');
     initWithFirebaseGlobal();
     var waited = 0;
     var waitInterval = setInterval(function(){
       var code = getClubCode();
-      var proceed = (code && !hasValidCode()) || (!window._needsFirebaseGlobalFetch && !window._firebaseGlobalFetchPending) || waited > 2000;
-      if(waited === 0 || waited % 1000 === 0) console.log('[INIT] FB wait loop: waited=' + waited + 'ms, code=' + code + ', needsFFetch=' + window._needsFirebaseGlobalFetch + ', fetchPending=' + window._firebaseGlobalFetchPending + ', proceed=' + proceed);
-      if(proceed){
-        console.log('[INIT] FB wait loop: condition met');
+      if((code && !hasValidCode()) || (!window._needsFirebaseGlobalFetch && !window._firebaseGlobalFetchPending) || waited > 2000){
         clearInterval(waitInterval);
         if(code && !hasValidCode()){
-          console.log('[INIT] FB wait: code exists but not valid → showCodeEntry');
           window._pendingInit=true;
           showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
         } else {
-          console.log('[INIT] FB wait: proceeding to doInit');
           doInit();
         }
       }
       waited += 250;
     },250);
   } else {
-    console.log('[INIT] Branch: no Firebase fetch needed → immediate check');
     var code = getClubCode();
-    console.log('[INIT] immediate: code =', code, ', hasValidCode() =', hasValidCode());
     if(code && !hasValidCode()){
-      console.log('[INIT] immediate: code exists but not valid → showCodeEntry');
       window._pendingInit=true;
       showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
     } else {
-      console.log('[INIT] immediate: proceeding to doInit');
       doInit();
     }
   }
@@ -2771,40 +2734,10 @@ function createProjectFromQuick(){
    SECURITY: CLUB CODE（入室コード）
 ============================================================ */
 var CLUB_CODE_LS='bm_club_code';
-function getStoredCode(){
-  var code = '';
-  try{
-    code = localStorage.getItem(CLUB_CODE_LS)||window._storedClubCodeFallback||'';
-  }catch(e){
-    code = window._storedClubCodeFallback||'';
-  }
-  console.log('[SECURITY] getStoredCode() =', code);
-  return code;
-}
-function setStoredCode(c){
-  try{localStorage.setItem(CLUB_CODE_LS,c);}catch(e){/* will fall back to in-memory storage */} 
-  window._storedClubCodeFallback = c || '';
-  console.log('[SECURITY] setStoredCode(', c, ')');
-}
-function getClubCode(){
-  var g=loadGlobal();
-  var code = (g&&g.clubCode)?g.clubCode:'';
-  console.log('[SECURITY] getClubCode() =', code, '(from global)');
-  return code;
-}
-function hasValidCode(){
-  var code=getClubCode();
-  // If no code is set remotely, allow access (no protection)
-  if(!code){
-    console.log('[SECURITY] hasValidCode = true (no code set)');
-    return true;
-  }
-  // If code is set remotely, require matching stored code
-  var stored = getStoredCode();
-  var valid = stored === code;
-  console.log('[SECURITY] hasValidCode = ' + valid + ' (code set: ' + code + ', stored: ' + stored + ')');
-  return valid;
-}function hasValidCode(){var code=getClubCode();if(!code)return true;return getStoredCode()===code;}
+function getStoredCode(){try{return localStorage.getItem(CLUB_CODE_LS)||window._storedClubCodeFallback||'';}catch(e){return window._storedClubCodeFallback||'';}}
+function setStoredCode(c){try{localStorage.setItem(CLUB_CODE_LS,c);}catch(e){/* will fall back to in-memory storage */} window._storedClubCodeFallback = c || '';}
+function getClubCode(){var g=loadGlobal();return(g&&g.clubCode)?g.clubCode:'';}
+function hasValidCode(){var code=getClubCode();if(!code)return true;var stored=getStoredCode();return stored===code;}function hasValidCode(){var code=getClubCode();if(!code)return true;return getStoredCode()===code;}
 function hideStartupOverlay(){
   var ov=document.getElementById('startup-overlay'); if(ov) ov.style.display='none';
 }
@@ -2820,11 +2753,9 @@ function showStartupOverlay(message){
   document.body.appendChild(div);
 }
 function showCodeEntry(cb){
-  console.log('[CODE] showCodeEntry called. cb exists:', !!cb);
   hideStartupOverlay();
   var existing=document.getElementById('code-overlay');
   if(existing){
-    console.log('[CODE] Existing code-overlay found, will replace');
     if(cb && !window._codeCb) window._codeCb = cb;
     existing.remove();
   }
@@ -2844,21 +2775,13 @@ function showCodeEntry(cb){
   setTimeout(function(){var i=document.getElementById('ci');if(i){i.focus();i.onkeydown=function(e){if(e.key==='Enter')tryCode();};}},100);
 }
 function tryCode(){
-  console.log('[CODE] tryCode called');
   var inp=document.getElementById('ci');if(!inp)return;
   var val=inp.value.trim();var code=getClubCode();
-  console.log('[CODE] Entered value:', val, ', Expected code:', code);
   if(!code||val===code){
-    console.log('[CODE] Code match! Saving and closing');
     setStoredCode(val);
     var ov=document.getElementById('code-overlay');if(ov)ov.remove();
-    if(window._codeCb){
-      console.log('[CODE] Calling callback');
-      window._codeCb(true);
-      window._codeCb=null;
-    }
+    if(window._codeCb){window._codeCb(true);window._codeCb=null;}
   }else{
-    console.log('[CODE] Code mismatch!');
     var err=document.getElementById('ce');if(err)err.textContent='コードが違います';
     inp.value='';inp.focus();
   }
