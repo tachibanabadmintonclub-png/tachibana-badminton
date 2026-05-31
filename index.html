@@ -48,7 +48,7 @@
   <!-- Right: action buttons -->
   <div style="display:flex;align-items:center;gap:2px;flex-shrink:0">
     <button class="hdr-btn" id="id-pill-btn" onclick="openIdentityModal()" title="マイプロフィール" style="font-size:16px;width:28px;height:28px">👤</button>
-    <a class="hdr-btn" href="#" onclick="if(enforceClubCodeGuard(function(){ window.location.href='manual.html'; })){}; return false;" title="使い方ガイド" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px">❓</a>
+    <a class="hdr-btn" href="#" onclick="if(enforceClubCodeGuard(function(){ window.location.href='manual.html'; })){ window.location.href='manual.html'; } return false;" title="使い方ガイド" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px">❓</a>
     <button class="hdr-btn" onclick="openModal('modal-settings')" title="設定" style="width:28px;height:28px">⚙️</button>
   </div>
 </div>
