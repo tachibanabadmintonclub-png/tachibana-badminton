@@ -638,6 +638,7 @@ function defaultFaces(){
    INIT
 ============================================================ */
 function doInit(){
+  hideStartupOverlay();
   load();
   if(!S.levels||!S.levels.length)S.levels=defaultLevels();
   if(!S.groups||!S.groups.length)S.groups=defaultGroups();
@@ -668,6 +669,7 @@ function doInit(){
 function init(){
   initProjects();
   fbInit();
+  showStartupOverlay('入室コードを確認しています…');
   // If club code exists locally and not yet provided on this client, block initialization
   var earlyCode=getClubCode();
   if(earlyCode && !hasValidCode()){
@@ -2734,7 +2736,22 @@ function getStoredCode(){try{return localStorage.getItem(CLUB_CODE_LS)||window._
 function setStoredCode(c){try{localStorage.setItem(CLUB_CODE_LS,c);}catch(e){/* will fall back to in-memory storage */} window._storedClubCodeFallback = c || '';}
 function getClubCode(){var g=loadGlobal();return(g&&g.clubCode)?g.clubCode:'';}
 function hasValidCode(){var code=getClubCode();if(!code)return true;return getStoredCode()===code;}
+function hideStartupOverlay(){
+  var ov=document.getElementById('startup-overlay'); if(ov) ov.style.display='none';
+}
+function showStartupOverlay(message){
+  var ov=document.getElementById('startup-overlay');
+  if(ov){ ov.style.display='flex'; var txt=document.getElementById('startup-overlay-text'); if(txt) txt.textContent=message||'入室コードを確認しています…'; return; }
+  var div=document.createElement('div'); div.id='startup-overlay'; div.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.96);display:flex;align-items:center;justify-content:center;padding:20px;';
+  div.innerHTML='<div style="width:100%;max-width:320px;background:rgba(20,24,32,0.95);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:28px 20px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.4);">'
+    +'<div style="font-size:38px;line-height:1;margin-bottom:14px">🏸</div>'
+    +'<div style="font-family:var(--disp);font-size:20px;font-weight:700;color:#fff;margin-bottom:10px">Tachibana Badminton</div>'
+    +'<div id="startup-overlay-text" style="font-size:13px;color:#ddd;line-height:1.5;">'+(message||'入室コードを確認しています…')+'</div>'
+    +'</div>';
+  document.body.appendChild(div);
+}
 function showCodeEntry(cb){
+  hideStartupOverlay();
   var existing=document.getElementById('code-overlay');
   if(existing){
     if(cb && !window._codeCb) window._codeCb = cb;
