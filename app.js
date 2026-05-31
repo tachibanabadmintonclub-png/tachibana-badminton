@@ -194,7 +194,7 @@ function fbApplyGlobal(d){
   try{
     var remoteCode=getClubCode();
     if(remoteCode && !hasValidCode()){
-      setTimeout(function(){ try{ closeAllModals(); showCodeEntry(function(ok){ if(ok) { /* proceed as normal */ } }); }catch(e){} },50);
+      setTimeout(function(){ try{ closeAllModals(); showCodeEntry(); }catch(e){} },50);
     }
   }catch(e){}
   console.log('[FB] global applied, projects='+d.projects.length+' ts='+inTs);
@@ -317,7 +317,7 @@ function initWithFirebaseGlobal(){
           firebase.database(fbApp).ref('meta/clubCode').once('value').then(function(snap){
             var code = snap.val()||''; var g = loadGlobal()||{projects:[],currentId:null};
             if(code && g.clubCode!==code){ g.clubCode = code; saveGlobal(g); updateClubCodeDisplay();
-              try{ if(code && !hasValidCode()){ setTimeout(function(){ try{ closeAllModals(); showCodeEntry(function(ok){}); }catch(e){} },50); } }catch(e){}
+              try{ if(code && !hasValidCode()){ setTimeout(function(){ try{ closeAllModals(); showCodeEntry(); }catch(e){} },50); } }catch(e){}
             }
           }).catch(function(){});
         }
@@ -338,7 +338,7 @@ function initWithFirebaseGlobal(){
         firebase.database(fbApp).ref('meta/clubCode').once('value').then(function(snap){
           var code = snap.val()||''; var g2 = loadGlobal()||{projects:[],currentId:null};
           if(code && g2.clubCode!==code){ g2.clubCode = code; saveGlobal(g2); updateClubCodeDisplay();
-            try{ if(code && !hasValidCode()){ setTimeout(function(){ try{ closeAllModals(); showCodeEntry(function(ok){}); }catch(e){} },50); } }catch(e){}
+            try{ if(code && !hasValidCode()){ setTimeout(function(){ try{ closeAllModals(); showCodeEntry(); }catch(e){} },50); } }catch(e){}
           }
         }).catch(function(){});
       }
@@ -667,7 +667,8 @@ function init(){
       if((code && !hasValidCode()) || !window._needsFirebaseGlobalFetch || waited > 2000){
         clearInterval(waitInterval);
         if(code && !hasValidCode()){
-          showCodeEntry(function(ok){ if(ok) doInit(); });
+          window._pendingInit=true;
+          showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
         } else {
           doInit();
         }
@@ -678,7 +679,8 @@ function init(){
     // Normal flow when no Firebase global fetch is pending
     var code = getClubCode();
     if(code && !hasValidCode()){
-      showCodeEntry(function(ok){ if(ok) doInit(); });
+      window._pendingInit=true;
+      showCodeEntry(function(ok){ window._pendingInit=false; if(ok) doInit(); });
     } else {
       doInit();
     }
@@ -2390,7 +2392,7 @@ function buildPinBtn(mid,hasPinSet){
 function openIdentityModal(){
   // If club code protection is active and not satisfied, force code-entry instead
   if(!hasValidCode()){
-    try{ closeAllModals(); showCodeEntry(function(ok){}); }catch(e){}
+    try{ closeAllModals(); showCodeEntry(); }catch(e){}
     return;
   }
   var me=getMyMember();
@@ -2663,11 +2665,17 @@ function createProjectFromQuick(){
    SECURITY: CLUB CODE（入室コード）
 ============================================================ */
 var CLUB_CODE_LS='bm_club_code';
-function getStoredCode(){try{return localStorage.getItem(CLUB_CODE_LS)||'';}catch(e){return '';}}
-function setStoredCode(c){try{localStorage.setItem(CLUB_CODE_LS,c);}catch(e){}}
+function getStoredCode(){try{return localStorage.getItem(CLUB_CODE_LS)||window._storedClubCodeFallback||'';}catch(e){return window._storedClubCodeFallback||'';}}
+function setStoredCode(c){try{localStorage.setItem(CLUB_CODE_LS,c);}catch(e){/* will fall back to in-memory storage */} window._storedClubCodeFallback = c || '';}
 function getClubCode(){var g=loadGlobal();return(g&&g.clubCode)?g.clubCode:'';}
 function hasValidCode(){var code=getClubCode();if(!code)return true;return getStoredCode()===code;}
 function showCodeEntry(cb){
+  var existing=document.getElementById('code-overlay');
+  if(existing){
+    if(cb && !window._codeCb) window._codeCb = cb;
+    existing.remove();
+  }
+  closeAllModals();
   var ov=document.createElement('div');ov.id='code-overlay';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   ov.innerHTML='<div style="background:var(--bg2);border:1px solid var(--accent);border-radius:18px;padding:30px 20px;width:100%;max-width:300px;text-align:center">'
@@ -2678,7 +2686,8 @@ function showCodeEntry(cb){
     +'<div id="ce" style="color:var(--red);font-size:11px;margin-bottom:10px;min-height:14px"></div>'
     +'<button onclick="tryCode()" style="width:100%;padding:14px;background:var(--accent);border:none;border-radius:8px;color:#000;font-size:15px;font-weight:700;cursor:pointer">入室する</button>'
     +'</div>';
-  document.body.appendChild(ov);window._codeCb=cb;
+  document.body.appendChild(ov);
+  window._codeCb = window._codeCb || cb || null;
   setTimeout(function(){var i=document.getElementById('ci');if(i){i.focus();i.onkeydown=function(e){if(e.key==='Enter')tryCode();};}},100);
 }
 function tryCode(){
